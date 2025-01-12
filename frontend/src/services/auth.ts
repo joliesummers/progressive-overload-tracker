@@ -7,16 +7,27 @@ export interface LoginCredentials {
   password: string;
 }
 
+export interface RegisterCredentials {
+  email: string;
+  password: string;
+  full_name: string;
+}
+
 export interface AuthResponse {
   access_token: string;
   token_type: string;
 }
 
+export const register = async (credentials: RegisterCredentials): Promise<void> => {
+  await axios.post(`${API_URL}/register`, credentials);
+};
+
 export const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
-  const response = await axios.post(`${API_URL}/token`, {
-    username: credentials.email,
-    password: credentials.password,
-  });
+  const formData = new FormData();
+  formData.append('username', credentials.email);
+  formData.append('password', credentials.password);
+  
+  const response = await axios.post(`${API_URL}/token`, formData);
   
   // Store the token for future requests
   localStorage.setItem('token', response.data.access_token);

@@ -7,6 +7,10 @@
 - [x] Set up Docker configuration
 - [x] Configure AWS infrastructure
 - [ ] Set up CI/CD pipeline
+- [x] Set up development environment
+  - [x] Configure Docker Compose for local development
+  - [x] Set up environment variables
+  - [x] Configure ports consistently (FE: 3000, BE: 8000, DB: 5432)
 
 ## Backend Development
 - [x] Set up Python FastAPI backend structure
@@ -24,10 +28,11 @@
   - [ ] Password reset functionality
   - [ ] Email verification
 - [ ] Create API endpoints:
-  - [ ] User management
+  - [x] User management
+  - [x] Analytics endpoints
+    - [x] Muscle tracking status
   - [ ] Workout session management
   - [ ] Natural language workout input processing
-  - [ ] Analytics and reporting
   - [ ] Sentiment analysis
 
 ## Frontend Development
@@ -35,11 +40,22 @@
 - [x] Create component structure
 - [x] Implement chat interface
 - [x] Create analytics dashboard
-- [ ] Implement authentication UI
-  - [ ] Login page
-  - [ ] Registration page
+  - [x] Basic layout with muscle tracking
+  - [x] Weekly/Monthly view toggle
+  - [x] Loading and error states
+  - [x] Recovery status display
+- [x] Implement authentication UI
+  - [x] Login page
+  - [x] Registration page
   - [ ] Password reset flow
-- [ ] Create dashboard for workout analytics
+- [x] Implement navigation
+  - [x] Side drawer menu
+  - [x] Protected routes
+  - [x] Route guards for authentication
+- [x] Set up data fetching
+  - [x] React Query integration
+  - [x] API service structure
+  - [x] Authentication token handling
 - [ ] Design and implement muscle coverage visualization
 - [ ] Create progressive overload charts
 - [ ] Implement sentiment analysis visualization
@@ -66,32 +82,76 @@
 - [ ] Create natural language response templates
 - [ ] Set up sentiment analysis pipeline
 
-## Testing
-- [ ] Write unit tests for backend
-- [ ] Write integration tests
-- [ ] Implement frontend testing
-- [ ] Perform load testing
-- [ ] Security testing
+## Workout Session Management
+- [ ] Implement workout session inference logic
+  - [ ] Create temporal grouping algorithm
+    - [ ] Group exercises by time proximity (within 90 minutes)
+    - [ ] Split into separate sessions if gap exceeds 2 hours
+    - [ ] Handle timezone considerations
+  - [ ] Infer session metadata
+    - [ ] First exercise timestamp as session start
+    - [ ] Last exercise timestamp as session end
+    - [ ] Calculate duration from exercise timestamps
+    - [ ] Derive workout type from exercises
+    - [ ] Calculate total volume
+    - [ ] Track exercise count
 
-## DevOps
-- [ ] Set up Docker containers
-  - [ ] Backend service
-  - [ ] Frontend service
-  - [ ] Database service
+- [ ] Implement date handling system
+  - [ ] Add date parsing from natural language
+  - [ ] Create date validation rules
+  - [ ] Handle explicit date inputs
+  - [ ] Default to chat timestamp when no date given
+  - [ ] Add timezone handling
+
+- [ ] Update database schema
+  - [ ] Add workout_sessions table
+    - [ ] Session ID (auto-generated)
+    - [ ] User ID
+    - [ ] Actual workout date
+    - [ ] First exercise timestamp
+    - [ ] Last exercise timestamp
+    - [ ] Automatically calculated duration
+  - [ ] Modify exercises table
+    - [ ] Add session ID foreign key (assigned after inference)
+    - [ ] Add exercise timestamp
+    - [ ] Add input timestamp
+
+## Infrastructure and DevOps
+- [x] Set up Docker containers
+  - [x] Backend service
+  - [x] Frontend service
+  - [x] Database service
+- [x] Configure development environment
+  - [x] Docker Compose for local development
+  - [x] Environment variables
+  - [x] Port configuration
 - [ ] Configure AWS services
-  - [ ] ECS/EKS setup
-  - [ ] RDS for PostgreSQL
-  - [ ] Bedrock integration
-  - [ ] S3 for static assets
-- [ ] Implement monitoring and logging
-- [ ] Set up backup systems
+  - [ ] Set up ECS clusters
+  - [ ] Configure RDS instance
+  - [ ] Set up load balancing
+  - [ ] Configure auto-scaling
+- [ ] Set up monitoring and logging
+  - [ ] Application logs
+  - [ ] Error tracking
+  - [ ] Performance monitoring
+  - [ ] User analytics
+
+## Testing
+- [ ] Set up testing infrastructure
+  - [ ] Backend unit tests
+  - [ ] Frontend unit tests
+  - [ ] Integration tests
+  - [ ] End-to-end tests
+- [ ] Create test data generators
+- [ ] Implement CI/CD test automation
 
 ## Documentation
+- [x] Create basic README
+- [x] Document environment setup
+- [x] Create .env.example
 - [ ] API documentation
-- [ ] System architecture documentation
-- [ ] User guide
-- [ ] Developer guide
-- [ ] Deployment guide
+- [ ] Development guidelines
+- [ ] Deployment procedures
 
 ## Future Phases
 - [ ] Voice input integration

@@ -35,9 +35,8 @@ export interface WorkoutSession {
 
 export interface MuscleTrackingStatus {
   muscle_name: string;
-  weekly_volume: number;
-  monthly_volume: number;
-  last_worked: Date;
-  coverage_rating: 'Excellent' | 'Good' | 'Adequate' | 'Not enough';
-  recovery_status: number;
+  last_workout: string;
+  recovery_status: 'Recovered' | 'Recovering' | 'Fatigued';
+  volume_trend: number;
+  sets_last_week: number;
 }

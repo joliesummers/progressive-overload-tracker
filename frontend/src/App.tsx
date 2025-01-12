@@ -38,15 +38,18 @@ function App() {
             <AuthProvider>
               <Router>
                 <Routes>
+                  {/* Public Routes */}
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/register" element={<RegisterPage />} />
                   <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                  
+                  {/* Protected Routes */}
                   <Route
                     path="/"
                     element={
                       <ProtectedRoute>
                         <Layout>
-                          <AnalyticsDashboard muscleData={[]} />
+                          <AnalyticsDashboard />
                         </Layout>
                       </ProtectedRoute>
                     }
@@ -61,6 +64,8 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
+
+                  {/* Catch-all route - redirect to home */}
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Router>

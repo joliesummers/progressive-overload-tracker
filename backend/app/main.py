@@ -2,14 +2,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-from .services.exercise_analysis import MockClaudeService, ExerciseAnalysis
+from .services import MockClaudeService, ExerciseAnalysis
+from .routes.auth import router as auth_router
+from .routes.analytics import router as analytics_router
 
 app = FastAPI(title="Progressive Overload API")
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Modify in production
+    allow_origins=["http://localhost:3000"],  # Frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -17,6 +19,10 @@ app.add_middleware(
 
 # Initialize services
 claude_service = MockClaudeService()
+
+# Include routers
+app.include_router(auth_router, tags=["auth"])
+app.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
 
 class WorkoutInput(BaseModel):
     exercise_description: str

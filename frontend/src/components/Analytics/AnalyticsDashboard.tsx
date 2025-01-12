@@ -6,17 +6,19 @@ import {
   ToggleButtonGroup,
   Typography,
   Box,
+  CircularProgress,
 } from '@mui/material';
 import MuscleActivationChart from './MuscleActivationChart';
 import MuscleStatusCard from './MuscleStatusCard';
-import { MuscleTrackingStatus } from '../../types/exercise';
+import { useAnalytics } from '../../hooks/useAnalytics';
 
 interface AnalyticsDashboardProps {
-  muscleData: MuscleTrackingStatus[];
+  // muscleData: MuscleTrackingStatus[];
 }
 
-const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ muscleData }) => {
+const AnalyticsDashboard: React.FC = () => {
   const [timeframe, setTimeframe] = useState<'weekly' | 'monthly'>('weekly');
+  const { data: muscleData, isLoading, error } = useAnalytics();
 
   const handleTimeframeChange = (
     _event: React.MouseEvent<HTMLElement>,
@@ -26,6 +28,30 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ muscleData }) =
       setTimeframe(newTimeframe);
     }
   };
+
+  if (isLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography color="error">Error loading analytics data. Please try again later.</Typography>
+      </Box>
+    );
+  }
+
+  if (!muscleData || muscleData.length === 0) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography>No workout data available. Start tracking your workouts to see analytics!</Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: 3 }}>
