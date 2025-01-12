@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Box, Paper, Typography, CircularProgress } from '@mui/material';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
+import { analyzeExercise } from '../../services/exercise';
 
 interface Message {
   id: string;
@@ -36,33 +37,23 @@ const WorkoutChat: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // TODO: Send to backend API
-      const response = await fetch('http://localhost:8000/analyze/exercise', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          exercise_description: text,
-        }),
-      });
-
-      const data = await response.json();
+      const analysis = await analyzeExercise(text);
       
-      // Add AI response
-      const aiMessage: Message = {
+      // Create response message
+      const responseText = formatAnalysis(analysis);
+      const botMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: JSON.stringify(data, null, 2), // Format the response for now
+        text: responseText,
         isUser: false,
         timestamp: new Date(),
       };
-      setMessages(prev => [...prev, aiMessage]);
-    } catch (error) {
-      console.error('Error:', error);
+      
+      setMessages(prev => [...prev, botMessage]);
+    } catch (error: any) {
       // Add error message
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: 'Sorry, I encountered an error processing your message.',
+        text: error.message || 'Sorry, I could not analyze your exercise. Please try again.',
         isUser: false,
         timestamp: new Date(),
       };
@@ -72,61 +63,62 @@ const WorkoutChat: React.FC = () => {
     }
   };
 
-  const handleStartRecording = () => {
-    setIsRecording(true);
-    // TODO: Implement voice recording
-  };
+  const formatAnalysis = (analysis: any) => {
+    let response = '';
 
-  const handleStopRecording = () => {
-    setIsRecording(false);
-    // TODO: Implement voice recording stop
+    // Add muscles worked
+    if (analysis.muscles_worked?.length > 0) {
+      response += '🎯 Muscles Worked:\n';
+      analysis.muscles_worked.forEach((muscle: any) => {
+        response += `- ${muscle.muscle} (${muscle.activation_level})\n`;
+      });
+      response += '\n';
+    }
+
+    // Add recommendations
+    if (analysis.recommendations?.length > 0) {
+      response += '💡 Recommendations:\n';
+      analysis.recommendations.forEach((rec: string) => {
+        response += `- ${rec}\n`;
+      });
+      response += '\n';
+    }
+
+    // Add form tips
+    if (analysis.form_tips?.length > 0) {
+      response += '✨ Form Tips:\n';
+      analysis.form_tips.forEach((tip: string) => {
+        response += `- ${tip}\n`;
+      });
+    }
+
+    return response.trim();
   };
 
   return (
-    <Paper 
-      elevation={3}
-      sx={{
-        height: '80vh',
-        display: 'flex',
-        flexDirection: 'column',
-        m: 2,
-      }}
-    >
+    <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-        <Typography variant="h6">Workout Chat</Typography>
+        <Typography variant="h6">Exercise Analysis Chat</Typography>
       </Box>
-      
-      <Box 
-        sx={{
-          flex: 1,
-          overflow: 'auto',
-          p: 2,
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
+
+      <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
         {messages.map((message) => (
-          <ChatMessage
-            key={message.id}
-            message={message.text}
-            isUser={message.isUser}
-            timestamp={message.timestamp}
-          />
+          <ChatMessage key={message.id} message={message} />
         ))}
+        <div ref={messagesEndRef} />
         {isLoading && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
             <CircularProgress size={24} />
           </Box>
         )}
-        <div ref={messagesEndRef} />
       </Box>
 
-      <Box sx={{ p: 2 }}>
-        <ChatInput
-          onSendMessage={handleSendMessage}
-          onStartRecording={handleStartRecording}
-          onStopRecording={handleStopRecording}
+      <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+        <ChatInput 
+          onSendMessage={handleSendMessage} 
+          isLoading={isLoading}
           isRecording={isRecording}
+          setIsRecording={setIsRecording}
         />
       </Box>
     </Paper>

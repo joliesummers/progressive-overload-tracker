@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from ..models.user import UserCreate, UserResponse
+from ..models.user import User, UserCreate, UserResponse, UserInDB, TokenData
 
 # TODO: Move to environment variables
 SECRET_KEY = "your-secret-key-here"  # Change this in production!
@@ -12,7 +12,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 # In-memory user storage (replace with database in production)
 users_db = {}
@@ -24,31 +24,6 @@ def get_password_hash(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
-async def create_user(user: UserCreate) -> UserResponse:
-    global user_id_counter
-    if user.email in users_db:
-        raise ValueError("Email already registered")
-    
-    hashed_password = get_password_hash(user.password)
-    user_dict = {
-        "id": user_id_counter,
-        "email": user.email,
-        "full_name": user.full_name,
-        "hashed_password": hashed_password
-    }
-    users_db[user.email] = user_dict
-    user_id_counter += 1
-    
-    return UserResponse(**user_dict)
-
-async def authenticate_user(email: str, password: str):
-    user = users_db.get(email)
-    if not user:
-        return False
-    if not verify_password(password, user["hashed_password"]):
-        return False
-    return UserResponse(**user)
-
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
@@ -59,9 +34,45 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserResponse:
+async def create_user(user: UserCreate) -> UserResponse:
+    global user_id_counter
+    if user.email in users_db:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    hashed_password = get_password_hash(user.password)
+    user_dict = UserInDB(
+        id=user_id_counter,
+        email=user.email,
+        full_name=user.full_name,
+        hashed_password=hashed_password,
+        is_active=True,
+        is_superuser=False
+    )
+    users_db[user.email] = user_dict
+    user_id_counter += 1
+    
+    return UserResponse(id=user_dict.id, email=user_dict.email, full_name=user_dict.full_name)
+
+async def authenticate_user(email: str, password: str) -> Optional[User]:
+    user = users_db.get(email)
+    if not user:
+        return None
+    if not verify_password(password, user.hashed_password):
+        return None
+    return User(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active,
+        is_superuser=user.is_superuser
+    )
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     credentials_exception = HTTPException(
-        status_code=401,
+        status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
@@ -70,11 +81,18 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserResponse:
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
+        token_data = TokenData(email=email)
     except JWTError:
         raise credentials_exception
         
-    user = users_db.get(email)
+    user = users_db.get(token_data.email)
     if user is None:
         raise credentials_exception
         
-    return UserResponse(**user)
+    return User(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active,
+        is_superuser=user.is_superuser
+    )

@@ -17,25 +17,36 @@ interface MuscleStatusCardProps {
 const MuscleStatusCard: React.FC<MuscleStatusCardProps> = ({ status }) => {
   const theme = useTheme();
 
-  const getCoverageColor = (rating: string) => {
-    switch (rating) {
-      case 'Excellent':
+  const getRecoveryColor = (status: string) => {
+    switch (status) {
+      case 'Recovered':
         return theme.palette.success.main;
-      case 'Good':
-        return theme.palette.info.main;
-      case 'Adequate':
+      case 'Recovering':
         return theme.palette.warning.main;
-      case 'Not enough':
+      case 'Fatigued':
         return theme.palette.error.main;
       default:
         return theme.palette.grey[500];
     }
   };
 
-  const getRecoveryColor = (recovery: number) => {
-    if (recovery >= 0.8) return theme.palette.success.main;
-    if (recovery >= 0.5) return theme.palette.warning.main;
+  const getVolumeColor = (trend: number) => {
+    if (trend >= 4.0) return theme.palette.success.main;
+    if (trend >= 2.5) return theme.palette.warning.main;
     return theme.palette.error.main;
+  };
+
+  const getRecoveryPercentage = (status: string) => {
+    switch (status) {
+      case 'Recovered':
+        return 100;
+      case 'Recovering':
+        return 60;
+      case 'Fatigued':
+        return 30;
+      default:
+        return 0;
+    }
   };
 
   return (
@@ -47,25 +58,19 @@ const MuscleStatusCard: React.FC<MuscleStatusCardProps> = ({ status }) => {
         
         <Box sx={{ mb: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            Coverage Rating
+            Recovery Status
           </Typography>
           <Chip
-            label={status.coverage_rating}
+            label={status.recovery_status}
             sx={{
-              bgcolor: getCoverageColor(status.coverage_rating),
+              bgcolor: getRecoveryColor(status.recovery_status),
               color: 'white',
               mt: 1,
             }}
           />
-        </Box>
-
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Recovery Status
-          </Typography>
           <LinearProgress
             variant="determinate"
-            value={status.recovery_status * 100}
+            value={getRecoveryPercentage(status.recovery_status)}
             sx={{
               mt: 1,
               height: 8,
@@ -78,15 +83,34 @@ const MuscleStatusCard: React.FC<MuscleStatusCardProps> = ({ status }) => {
           />
         </Box>
 
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Volume Trend
+          </Typography>
+          <LinearProgress
+            variant="determinate"
+            value={(status.volume_trend / 5) * 100}
+            sx={{
+              mt: 1,
+              height: 8,
+              borderRadius: 4,
+              bgcolor: theme.palette.grey[200],
+              '& .MuiLinearProgress-bar': {
+                bgcolor: getVolumeColor(status.volume_trend),
+              },
+            }}
+          />
+        </Box>
+
         <Box sx={{ mb: 1 }}>
           <Typography variant="body2" color="text.secondary">
-            Weekly Volume: {status.weekly_volume.toFixed(1)}
+            Sets Last Week: {status.sets_last_week}
           </Typography>
         </Box>
 
         <Box>
           <Typography variant="body2" color="text.secondary">
-            Last Worked: {status.last_worked.toLocaleDateString()}
+            Last Workout: {new Date(status.last_workout).toLocaleDateString()}
           </Typography>
         </Box>
       </CardContent>

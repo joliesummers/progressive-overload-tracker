@@ -10,7 +10,8 @@ import {
   Alert,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { register } from '../../services/auth';
+import { registerValidationSchema } from '../../utils/validation';
 
 const RegisterPage: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -34,31 +35,39 @@ const RegisterPage: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
     try {
-      await axios.post('http://localhost:8000/register', {
+      // Validate form data
+      await registerValidationSchema.validate(formData);
+      
+      // Register user
+      await register({
         email: formData.email,
         password: formData.password,
         full_name: formData.fullName,
       });
+      
+      // Redirect to login page on success
       navigate('/login');
-    } catch (err) {
-      setError('Registration failed. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Registration failed. Please try again.');
     }
   };
 
   return (
-    <Container maxWidth="sm">
-      <Box sx={{ mt: 8, mb: 4 }}>
-        <Paper elevation={3} sx={{ p: 4 }}>
-          <Typography variant="h4" component="h1" gutterBottom align="center">
-            Create Account
+    <Container component="main" maxWidth="xs">
+      <Box
+        sx={{
+          marginTop: 8,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}
+      >
+        <Paper elevation={3} sx={{ padding: 4, width: '100%' }}>
+          <Typography component="h1" variant="h5" align="center" gutterBottom>
+            Register
           </Typography>
-
+          
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
@@ -67,61 +76,65 @@ const RegisterPage: React.FC = () => {
 
           <form onSubmit={handleSubmit}>
             <TextField
+              margin="normal"
+              required
               fullWidth
+              id="fullName"
               label="Full Name"
               name="fullName"
+              autoComplete="name"
+              autoFocus
               value={formData.fullName}
               onChange={handleChange}
-              margin="normal"
-              required
-              autoFocus
             />
             <TextField
+              margin="normal"
+              required
               fullWidth
-              label="Email"
+              id="email"
+              label="Email Address"
               name="email"
-              type="email"
+              autoComplete="email"
               value={formData.email}
               onChange={handleChange}
-              margin="normal"
-              required
             />
             <TextField
+              margin="normal"
+              required
               fullWidth
-              label="Password"
               name="password"
+              label="Password"
               type="password"
+              id="password"
+              autoComplete="new-password"
               value={formData.password}
               onChange={handleChange}
-              margin="normal"
-              required
             />
             <TextField
-              fullWidth
-              label="Confirm Password"
-              name="confirmPassword"
-              type="password"
-              value={formData.confirmPassword}
-              onChange={handleChange}
               margin="normal"
               required
+              fullWidth
+              name="confirmPassword"
+              label="Confirm Password"
+              type="password"
+              id="confirmPassword"
+              value={formData.confirmPassword}
+              onChange={handleChange}
             />
             <Button
               type="submit"
               fullWidth
               variant="contained"
-              size="large"
               sx={{ mt: 3, mb: 2 }}
             >
-              Sign Up
+              Register
             </Button>
+            <Box sx={{ textAlign: 'center' }}>
+              <Link href="/login" variant="body2">
+                Already have an account? Sign in
+              </Link>
+            </Box>
           </form>
-
-          <Box sx={{ mt: 2, textAlign: 'center' }}>
-            <Link href="/login" variant="body2">
-              Already have an account? Sign in
-            </Link>
-          </Box>
         </Paper>
       </Box>
     </Container>
