@@ -1,128 +1,120 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Box, Paper, Typography, CircularProgress } from '@mui/material';
-import ChatMessage from './ChatMessage';
-import ChatInput from './ChatInput';
-import { analyzeExercise } from '../../services/exercise';
+import React, { useState } from 'react';
+import { Box, TextField, Button, Paper, Typography, CircularProgress } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import SendIcon from '@mui/icons-material/Send';
 
 interface Message {
-  id: string;
   text: string;
-  isUser: boolean;
-  timestamp: Date;
+  sender: 'user' | 'bot';
 }
 
-const WorkoutChat: React.FC = () => {
+export const WorkoutChat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const messagesEndRef = useRef<null | HTMLDivElement>(null);
+  const theme = useTheme();
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const handleSend = async () => {
+    if (!input.trim()) return;
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const handleSendMessage = async (text: string) => {
-    // Add user message
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text,
-      isUser: true,
-      timestamp: new Date(),
-    };
+    const userMessage = { text: input, sender: 'user' as const };
     setMessages(prev => [...prev, userMessage]);
+    setInput('');
     setIsLoading(true);
 
     try {
-      const analysis = await analyzeExercise(text);
-      
-      // Create response message
-      const responseText = formatAnalysis(analysis);
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: responseText,
-        isUser: false,
-        timestamp: new Date(),
-      };
-      
+      const response = await fetch('http://localhost:8000/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message: input }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get response');
+      }
+
+      const data = await response.json();
+      const botMessage = { text: data.message, sender: 'bot' as const };
       setMessages(prev => [...prev, botMessage]);
-    } catch (error: any) {
-      // Add error message
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: error.message || 'Sorry, I could not analyze your exercise. Please try again.',
-        isUser: false,
-        timestamp: new Date(),
-      };
+    } catch (error) {
+      console.error('Error:', error);
+      const errorMessage = { text: 'Sorry, I encountered an error. Please try again.', sender: 'bot' as const };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const formatAnalysis = (analysis: any) => {
-    let response = '';
-
-    // Add muscles worked
-    if (analysis.muscles_worked?.length > 0) {
-      response += '🎯 Muscles Worked:\n';
-      analysis.muscles_worked.forEach((muscle: any) => {
-        response += `- ${muscle.muscle} (${muscle.activation_level})\n`;
-      });
-      response += '\n';
+  const handleKeyPress = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      handleSend();
     }
-
-    // Add recommendations
-    if (analysis.recommendations?.length > 0) {
-      response += '💡 Recommendations:\n';
-      analysis.recommendations.forEach((rec: string) => {
-        response += `- ${rec}\n`;
-      });
-      response += '\n';
-    }
-
-    // Add form tips
-    if (analysis.form_tips?.length > 0) {
-      response += '✨ Form Tips:\n';
-      analysis.form_tips.forEach((tip: string) => {
-        response += `- ${tip}\n`;
-      });
-    }
-
-    return response.trim();
   };
 
   return (
-    <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-        <Typography variant="h6">Exercise Analysis Chat</Typography>
-      </Box>
-
-      <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
-        {messages.map((message) => (
-          <ChatMessage key={message.id} message={message} />
-        ))}
-        <div ref={messagesEndRef} />
-        {isLoading && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-            <CircularProgress size={24} />
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Paper 
+        elevation={3} 
+        sx={{ 
+          flex: 1, 
+          mb: 2, 
+          p: 2, 
+          overflowY: 'auto',
+          bgcolor: theme.palette.background.default
+        }}
+      >
+        {messages.map((message, index) => (
+          <Box
+            key={index}
+            sx={{
+              display: 'flex',
+              justifyContent: message.sender === 'user' ? 'flex-end' : 'flex-start',
+              mb: 2
+            }}
+          >
+            <Paper
+              elevation={1}
+              sx={{
+                p: 2,
+                maxWidth: '70%',
+                bgcolor: message.sender === 'user' 
+                  ? theme.palette.primary.main 
+                  : theme.palette.background.paper,
+                color: message.sender === 'user' 
+                  ? theme.palette.primary.contrastText 
+                  : theme.palette.text.primary
+              }}
+            >
+              <Typography>{message.text}</Typography>
+            </Paper>
           </Box>
-        )}
-      </Box>
+        ))}
+      </Paper>
 
-      <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-        <ChatInput 
-          onSendMessage={handleSendMessage} 
-          isLoading={isLoading}
-          isRecording={isRecording}
-          setIsRecording={setIsRecording}
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <TextField
+          fullWidth
+          multiline
+          maxRows={4}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="Type your message..."
+          disabled={isLoading}
+          sx={{ flex: 1 }}
         />
+        <Button
+          variant="contained"
+          onClick={handleSend}
+          disabled={isLoading || !input.trim()}
+          sx={{ minWidth: 100 }}
+        >
+          {isLoading ? <CircularProgress size={24} /> : <SendIcon />}
+        </Button>
       </Box>
-    </Paper>
+    </Box>
   );
 };
-
-export default WorkoutChat;

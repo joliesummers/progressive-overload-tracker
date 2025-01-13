@@ -18,6 +18,7 @@ interface ChatInputProps {
   onStartRecording?: () => void;
   onStopRecording?: () => void;
   isRecording?: boolean;
+  isLoading?: boolean;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -25,19 +26,20 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onStartRecording,
   onStopRecording,
   isRecording = false,
+  isLoading = false,
 }) => {
   const [message, setMessage] = useState('');
   const theme = useTheme();
 
   const handleSend = () => {
-    if (message.trim()) {
+    if (message.trim() && !isLoading) {
       onSendMessage(message);
       setMessage('');
     }
   };
 
   const handleKeyPress = (event: KeyboardEvent) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === 'Enter' && !event.shiftKey && !isLoading) {
       event.preventDefault();
       handleSend();
     }
@@ -60,6 +62,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onChange={(e) => setMessage(e.target.value)}
           onKeyPress={handleKeyPress}
           placeholder="Enter your workout details..."
+          disabled={isLoading}
           sx={{
             '& .MuiOutlinedInput-root': {
               borderRadius: 2,
@@ -71,6 +74,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             <IconButton
               color={isRecording ? 'secondary' : 'primary'}
               onClick={isRecording ? onStopRecording : onStartRecording}
+              disabled={isLoading}
             >
               {isRecording ? <StopIcon /> : <MicIcon />}
             </IconButton>
@@ -79,7 +83,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
         <IconButton
           color="primary"
           onClick={handleSend}
-          disabled={!message.trim()}
+          disabled={!message.trim() || isLoading}
         >
           <SendIcon />
         </IconButton>
