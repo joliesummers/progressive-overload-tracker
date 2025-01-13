@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     aws_region: str = os.getenv("AWS_REGION", "us-east-2")
     bedrock_model_id: str = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-5-sonnet-20240620-v1:0")
 
+    # Database Settings
+    database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/workout_tracker")
+
     class Config:
         env_file = ".env"
 
