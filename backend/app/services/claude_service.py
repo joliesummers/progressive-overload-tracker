@@ -1,22 +1,55 @@
 import boto3
 import json
 from typing import Dict, List, Tuple
+from ..core.settings import get_settings
+from .exercise_analysis import ExerciseAnalysis, MuscleActivation
 
 class ClaudeService:
+    """Service for interacting with Claude via AWS Bedrock"""
+    
     def __init__(self):
-        self.bedrock = boto3.client('bedrock-runtime')
-        self.model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+        settings = get_settings()
+        self.bedrock = boto3.client(
+            service_name='bedrock-runtime',
+            region_name=settings.aws_region,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key
+        )
+        self.model_id = settings.bedrock_model_id
 
-    async def analyze_exercise(self, exercise_description: str) -> Dict:
+    def _create_exercise_prompt(self, exercise_description: str) -> str:
+        return f"""You are an expert personal trainer and exercise physiologist. Analyze this workout and break it down into structured data.
+        For each exercise, determine:
+        1. The primary muscles worked (activation level: PRIMARY)
+        2. The secondary muscles worked (activation level: SECONDARY)
+        3. The stabilizer muscles (activation level: TERTIARY)
+        4. The movement pattern category
+        5. Required equipment
+        
+        Format your response as JSON with this structure:
+        {{
+            "exercises": [
+                {{
+                    "name": "exercise name",
+                    "muscle_activations": [
+                        {{
+                            "muscle_name": "muscle",
+                            "activation_level": "PRIMARY/SECONDARY/TERTIARY",
+                            "estimated_volume": float (0-1)
+                        }}
+                    ],
+                    "movement_pattern": "pattern",
+                    "equipment_needed": ["equipment1", "equipment2"]
+                }}
+            ]
+        }}
+
+        Workout to analyze: {exercise_description}"""
+
+    async def analyze_exercise(self, exercise_description: str) -> List[ExerciseAnalysis]:
         """Analyze an exercise description to identify muscles worked and activation levels."""
-        prompt = f"""You are a professional exercise analysis system. Given the following exercise description, 
-        identify the primary, secondary, and tertiary muscles worked. Also estimate the relative activation level 
-        for each muscle group.
-
-        Exercise: {exercise_description}
-
-        Provide the analysis in a structured format."""
-
+        prompt = self._create_exercise_prompt(exercise_description)
+        
         response = self.bedrock.invoke_model(
             modelId=self.model_id,
             body=json.dumps({
@@ -31,8 +64,30 @@ class ClaudeService:
             })
         )
         
-        response_body = json.loads(response['body'].read())
-        return self._parse_muscle_analysis(response_body['content'][0]['text'])
+        response_body = json.loads(response.get('body').read())
+        analysis_json = json.loads(response_body['content'][0]['text'])
+        
+        # Convert JSON response to ExerciseAnalysis objects
+        exercise_analyses = []
+        for exercise in analysis_json['exercises']:
+            muscle_activations = [
+                MuscleActivation(
+                    muscle_name=ma['muscle_name'],
+                    activation_level=ma['activation_level'],
+                    estimated_volume=ma['estimated_volume']
+                )
+                for ma in exercise['muscle_activations']
+            ]
+            
+            analysis = ExerciseAnalysis(
+                exercise_name=exercise['name'],
+                muscle_activations=muscle_activations,
+                movement_pattern=exercise['movement_pattern'],
+                equipment_needed=exercise['equipment_needed']
+            )
+            exercise_analyses.append(analysis)
+        
+        return exercise_analyses
 
     async def analyze_workout_sentiment(self, workout_notes: str) -> Tuple[float, str]:
         """Analyze workout notes for sentiment and extract key insights."""
@@ -55,22 +110,15 @@ class ClaudeService:
             })
         )
         
-        response_body = json.loads(response['body'].read())
-        return self._parse_sentiment_analysis(response_body['content'][0]['text'])
-
-    def _parse_muscle_analysis(self, analysis_text: str) -> Dict:
-        """Parse the muscle analysis response into a structured format."""
-        # Implementation will parse Claude's response into a structured format
-        # This is a placeholder that will need to be implemented based on Claude's actual response format
-        return {
-            "primary_muscles": [],
-            "secondary_muscles": [],
-            "tertiary_muscles": [],
-            "activation_levels": {}
-        }
-
-    def _parse_sentiment_analysis(self, analysis_text: str) -> Tuple[float, str]:
-        """Parse the sentiment analysis response into a score and description."""
-        # Implementation will parse Claude's response into a sentiment score and description
-        # This is a placeholder that will need to be implemented based on Claude's actual response format
-        return 0.0, "Placeholder sentiment analysis"
+        response_body = json.loads(response.get('body').read())
+        analysis = response_body['content'][0]['text']
+        
+        # Extract sentiment score and insights
+        try:
+            # Parse the response to extract score and analysis
+            lines = analysis.strip().split('\n')
+            sentiment_score = float(lines[0].split(':')[1].strip())
+            insights = '\n'.join(lines[1:]).strip()
+            return sentiment_score, insights
+        except Exception as e:
+            return 0.0, f"Error parsing sentiment analysis: {str(e)}"

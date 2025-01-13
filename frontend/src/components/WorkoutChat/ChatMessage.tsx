@@ -4,11 +4,13 @@ import { Box, Paper, Typography, useTheme } from '@mui/material';
 interface ChatMessageProps {
   message: string;
   isUser: boolean;
-  timestamp: Date;
+  timestamp?: Date;  
 }
 
 const ChatMessage: React.FC<ChatMessageProps> = ({ message, isUser, timestamp }) => {
   const theme = useTheme();
+
+  const formattedMessage = typeof message === 'string' ? message : JSON.stringify(message);
 
   return (
     <Box
@@ -28,15 +30,17 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isUser, timestamp })
         }}
       >
         <Typography variant="body1" color={isUser ? 'white' : 'inherit'}>
-          {message}
+          {formattedMessage}
         </Typography>
-        <Typography
-          variant="caption"
-          color={isUser ? 'rgba(255,255,255,0.7)' : 'text.secondary'}
-          sx={{ display: 'block', mt: 1 }}
-        >
-          {timestamp.toLocaleTimeString()}
-        </Typography>
+        {timestamp && (
+          <Typography
+            variant="caption"
+            color={isUser ? 'rgba(255,255,255,0.7)' : 'text.secondary'}
+            sx={{ display: 'block', mt: 1 }}
+          >
+            {timestamp.toLocaleTimeString()}
+          </Typography>
+        )}
       </Paper>
     </Box>
   );
