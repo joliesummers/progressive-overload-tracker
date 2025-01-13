@@ -1,14 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter
 from typing import List
-from ..models.user import User
-from ..services.auth import get_current_user
 from ..models.exercise import MuscleTrackingStatus
 from datetime import datetime
 
 router = APIRouter()
 
 @router.get("/muscle-tracking", response_model=List[MuscleTrackingStatus])
-async def get_muscle_tracking(current_user: User = Depends(get_current_user)):
+async def get_muscle_tracking():
     # TODO: Replace with actual data from the database
     # This is mock data for now
     mock_data = [

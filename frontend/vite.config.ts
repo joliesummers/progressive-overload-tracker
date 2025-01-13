@@ -5,8 +5,30 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: true, // Listen on all addresses
-    port: 3000, // Use port 3000
-    strictPort: true, // Fail if port 3000 is not available
+    host: '0.0.0.0',
+    port: 3000,
+    strictPort: true, // This ensures Vite only uses port 3000
+    proxy: {
+      '/api': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/auth': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/analytics': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/exercise': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+        secure: false,
+      }
+    },
   },
 })

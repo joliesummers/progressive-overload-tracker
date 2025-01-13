@@ -2,10 +2,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-from .services import MockClaudeService, ExerciseAnalysis
-from .routes.auth import router as auth_router
 from .routes.analytics import router as analytics_router
 from .routes.exercise import router as exercise_router
+from .routes.chat import router as chat_router
 
 app = FastAPI(title="Progressive Overload API")
 
@@ -18,13 +17,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize services
-claude_service = MockClaudeService()
-
 # Include routers
-app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
 app.include_router(exercise_router, prefix="/exercise", tags=["exercise"])
+app.include_router(chat_router, prefix="/api", tags=["chat"])
 
 @app.get("/")
 async def root():

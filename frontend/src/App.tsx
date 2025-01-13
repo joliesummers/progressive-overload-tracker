@@ -1,17 +1,12 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import ErrorBoundary from './components/Common/ErrorBoundary';
-import ProtectedRoute from './components/Auth/ProtectedRoute';
 import Layout from './components/Layout';
-import WorkoutChat from './components/WorkoutChat/WorkoutChat';
-import LoginPage from './components/Auth/LoginPage';
-import RegisterPage from './components/Auth/RegisterPage';
-import ForgotPasswordPage from './components/Auth/ForgotPasswordPage';
+import { WorkoutChat } from './components/WorkoutChat/WorkoutChat';
 import AnalyticsDashboard from './components/Analytics/AnalyticsDashboard';
 
 const theme = createTheme({
@@ -35,41 +30,14 @@ function App() {
         <ThemeProvider theme={theme}>
           <CssBaseline />
           <NotificationProvider>
-            <AuthProvider>
-              <Router>
+            <Router>
+              <Layout>
                 <Routes>
-                  {/* Public Routes */}
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/register" element={<RegisterPage />} />
-                  <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-                  
-                  {/* Protected Routes */}
-                  <Route
-                    path="/"
-                    element={
-                      <ProtectedRoute>
-                        <Layout>
-                          <AnalyticsDashboard />
-                        </Layout>
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/chat"
-                    element={
-                      <ProtectedRoute>
-                        <Layout>
-                          <WorkoutChat />
-                        </Layout>
-                      </ProtectedRoute>
-                    }
-                  />
-
-                  {/* Catch-all route - redirect to home */}
-                  <Route path="*" element={<Navigate to="/" replace />} />
+                  <Route path="/" element={<WorkoutChat />} />
+                  <Route path="/analytics" element={<AnalyticsDashboard />} />
                 </Routes>
-              </Router>
-            </AuthProvider>
+              </Layout>
+            </Router>
           </NotificationProvider>
         </ThemeProvider>
       </QueryClientProvider>

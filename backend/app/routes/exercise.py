@@ -1,9 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from ..services import MockClaudeService, ExerciseAnalysis
-from ..models.user import User
-from ..services.auth import get_current_user
 
 router = APIRouter()
 claude_service = MockClaudeService()
@@ -16,10 +14,7 @@ class WorkoutInput(BaseModel):
     notes: Optional[str] = None
 
 @router.post("/analyze", response_model=ExerciseAnalysis)
-async def analyze_exercise(
-    workout: WorkoutInput,
-    current_user: User = Depends(get_current_user)
-):
+async def analyze_exercise(workout: WorkoutInput):
     """
     Analyze an exercise description to identify muscles worked and activation levels
     """
@@ -30,10 +25,7 @@ async def analyze_exercise(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/analyze/sentiment")
-async def analyze_workout_sentiment(
-    workout: WorkoutInput,
-    current_user: User = Depends(get_current_user)
-):
+async def analyze_workout_sentiment(workout: WorkoutInput):
     """
     Analyze workout notes for sentiment
     """

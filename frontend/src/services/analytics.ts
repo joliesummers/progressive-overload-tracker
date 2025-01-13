@@ -1,12 +1,11 @@
 import { MuscleTrackingStatus } from '../types/exercise';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, ENDPOINTS } from '../config';
 
 export const fetchMuscleData = async (): Promise<MuscleTrackingStatus[]> => {
-  const response = await fetch(`${API_BASE_URL}/analytics/muscle-tracking`, {
+  const response = await fetch(ENDPOINTS.MUSCLE_TRACKING, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${localStorage.getItem('token')}`,
     },
   });
 
