@@ -9,6 +9,7 @@ class ClaudeService:
     
     def __init__(self):
         settings = get_settings()
+        print(f"Initializing ClaudeService with region: {settings.aws_region}, model: {settings.bedrock_model_id}")
         self.bedrock = boto3.client(
             service_name='bedrock-runtime',
             region_name=settings.aws_region,
@@ -50,21 +51,28 @@ class ClaudeService:
         """Analyze an exercise description to identify muscles worked and activation levels."""
         prompt = self._create_exercise_prompt(exercise_description)
         
+        print(f"Making request to Bedrock with model ID: {self.model_id}")
+        print(f"Request body: {json.dumps({'anthropic_version': 'bedrock-2023-05-31', 'max_tokens': 4096, 'messages': [{'role': 'user', 'content': prompt}], 'temperature': 0.7}, indent=2)}")
+        
         response = self.bedrock.invoke_model(
             modelId=self.model_id,
             body=json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 1000,
+                "max_tokens": 4096,
                 "messages": [
                     {
                         "role": "user",
                         "content": prompt
                     }
-                ]
+                ],
+                "temperature": 0.7
             })
         )
         
+        print(f"Got response from Bedrock: {response}")
         response_body = json.loads(response.get('body').read())
+        print(f"Parsed response body: {json.dumps(response_body, indent=2)}")
+        
         analysis_json = json.loads(response_body['content'][0]['text'])
         
         # Convert JSON response to ExerciseAnalysis objects
@@ -96,21 +104,28 @@ class ClaudeService:
 
         Notes: {workout_notes}"""
 
+        print(f"Making request to Bedrock with model ID: {self.model_id}")
+        print(f"Request body: {json.dumps({'anthropic_version': 'bedrock-2023-05-31', 'max_tokens': 4096, 'messages': [{'role': 'user', 'content': prompt}], 'temperature': 0.7}, indent=2)}")
+        
         response = self.bedrock.invoke_model(
             modelId=self.model_id,
             body=json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 1000,
+                "max_tokens": 4096,
                 "messages": [
                     {
                         "role": "user",
                         "content": prompt
                     }
-                ]
+                ],
+                "temperature": 0.7
             })
         )
         
+        print(f"Got response from Bedrock: {response}")
         response_body = json.loads(response.get('body').read())
+        print(f"Parsed response body: {json.dumps(response_body, indent=2)}")
+        
         analysis = response_body['content'][0]['text']
         
         # Extract sentiment score and insights
@@ -121,4 +136,43 @@ class ClaudeService:
             insights = '\n'.join(lines[1:]).strip()
             return sentiment_score, insights
         except Exception as e:
+            print(f"Error parsing sentiment analysis: {str(e)}")
             return 0.0, f"Error parsing sentiment analysis: {str(e)}"
+
+    async def get_completion(self, prompt: str) -> str:
+        """Get a completion from Claude for a given prompt."""
+        try:
+            request_body = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 4096,
+                "system": "You are a helpful AI assistant focused on fitness and exercise. Help users with their fitness-related questions and workout planning.",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "temperature": 0.7
+            }
+            print(f"Making request to Bedrock with model ID: {self.model_id}")
+            print(f"Request body: {json.dumps(request_body, indent=2)}")
+            
+            response = self.bedrock.invoke_model(
+                modelId=self.model_id,
+                body=json.dumps(request_body)
+            )
+            
+            print(f"Got response from Bedrock: {response}")
+            response_body = json.loads(response.get('body').read())
+            print(f"Parsed response body: {json.dumps(response_body, indent=2)}")
+            
+            return response_body['content'][0]['text'].strip()
+            
+        except Exception as e:
+            print(f"Error in get_completion: {str(e)}")
+            print(f"Error type: {type(e)}")
+            if hasattr(e, '__dict__'):
+                print(f"Error attributes: {e.__dict__}")
+            if isinstance(e, boto3.exceptions.Boto3Error):
+                print(f"Boto3 error response: {e.response if hasattr(e, 'response') else 'No response'}")
+            raise Exception(f"Failed to get completion from Claude: {str(e)}")
