@@ -12,7 +12,7 @@ A smart workout tracking application that uses AI to help users track their musc
 ## Tech Stack
 - Backend: FastAPI (Python)
 - Frontend: React with TypeScript
-- Database: PostgreSQL
+- Database: PostgreSQL 15
 - AI: Claude Sonnet 3.5 via Amazon Bedrock
 - Infrastructure: AWS, Docker
 
