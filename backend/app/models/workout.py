@@ -100,14 +100,35 @@ class MuscleActivation(Base):
                 exercise_id=exercise_id,
                 muscle_name=muscle_name,
                 activation_level=ActivationLevel.SECONDARY,
-                estimated_volume=volume
+                estimated_volume=volume * 0.6  # Reduce volume for secondary muscles
             )
             activations.append(activation)
             
-        db.add_all(activations)
-        db.commit()
+        # Add tertiary muscles
+        for muscle_name, volume in muscle_data.get('tertiary_muscles', []):
+            activation = cls(
+                exercise_id=exercise_id,
+                muscle_name=muscle_name,
+                activation_level=ActivationLevel.TERTIARY,
+                estimated_volume=volume * 0.3  # Reduce volume for tertiary muscles
+            )
+            activations.append(activation)
         
-        # Update exercise and session volumes
-        exercise = db.query(Exercise).get(exercise_id)
-        if exercise:
-            exercise.calculate_total_volume(db)
+        if not activations:
+            return None
+            
+        try:
+            db.add_all(activations)
+            db.commit()
+            
+            # Update exercise and session volumes
+            exercise = db.query(Exercise).get(exercise_id)
+            if exercise:
+                exercise.calculate_total_volume(db)
+                if exercise.session:
+                    exercise.session.calculate_total_volume(db)
+            
+            return activations
+        except Exception as e:
+            db.rollback()
+            raise e

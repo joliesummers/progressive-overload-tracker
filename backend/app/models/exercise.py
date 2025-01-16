@@ -1,13 +1,15 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime
 
 class MuscleTrackingStatus(BaseModel):
-    muscle_name: str
-    last_workout: str  # ISO format date string
-    recovery_status: str  # "Recovered" | "Recovering" | "Fatigued"
-    volume_trend: float
-    sets_last_week: int
+    """Model for tracking muscle training status"""
+    muscle_name: str = Field(..., description="Name of the muscle")
+    last_trained: datetime = Field(..., description="Last time this muscle was trained")
+    days_since_last_trained: int = Field(..., description="Days since last trained")
+
+    class Config:
+        from_attributes = True
 
 class Exercise(BaseModel):
     exercise_name: str
@@ -20,6 +22,17 @@ class MuscleActivation(BaseModel):
     muscle_name: str
     activation_level: str  # "PRIMARY" | "SECONDARY" | "TERTIARY"
     estimated_volume: float
+
+class MuscleVolumeData(BaseModel):
+    """Model for muscle volume data"""
+    muscle_name: str = Field(..., description="Name of the muscle")
+    total_volume: float = Field(..., description="Total volume for the muscle in kg")
+    date: datetime = Field(..., description="Date of the volume data")
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
 
 class WorkoutSet(BaseModel):
     exercise: Exercise

@@ -3,11 +3,13 @@ import json
 from typing import Dict, List, Tuple
 from ..core.settings import get_settings
 from .exercise_analysis import ExerciseAnalysis, MuscleActivation
+from sqlalchemy.orm import Session
+from .workout_storage_service import WorkoutStorageService
 
 class ClaudeService:
     """Service for interacting with Claude via AWS Bedrock"""
     
-    def __init__(self):
+    def __init__(self, db: Session = None):
         settings = get_settings()
         print(f"Initializing ClaudeService with region: {settings.aws_region}, model: {settings.bedrock_model_id}")
         self.bedrock = boto3.client(
@@ -17,6 +19,7 @@ class ClaudeService:
             aws_secret_access_key=settings.aws_secret_access_key
         )
         self.model_id = settings.bedrock_model_id
+        self.storage_service = WorkoutStorageService(db) if db else None
 
     def _create_exercise_prompt(self, exercise_description: str) -> str:
         return f"""You are an expert personal trainer and exercise physiologist. Analyze this workout and break it down into structured data.
@@ -47,7 +50,7 @@ class ClaudeService:
 
         Workout to analyze: {exercise_description}"""
 
-    async def analyze_exercise(self, exercise_description: str) -> List[ExerciseAnalysis]:
+    async def analyze_exercise(self, exercise_description: str, session_id: int = None) -> List[ExerciseAnalysis]:
         """Analyze an exercise description to identify muscles worked and activation levels."""
         prompt = self._create_exercise_prompt(exercise_description)
         
@@ -94,6 +97,10 @@ class ClaudeService:
                 equipment_needed=exercise['equipment_needed']
             )
             exercise_analyses.append(analysis)
+            
+            # Store in database if session_id is provided and storage service is available
+            if session_id and self.storage_service:
+                self.storage_service.store_exercise_analysis(session_id, analysis)
         
         return exercise_analyses
 

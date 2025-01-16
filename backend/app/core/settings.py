@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     bedrock_model_id: str = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0")
 
     # Database Settings
-    database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/workout_tracker")
+    database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/workout_tracker")
 
     class Config:
         env_file = ".env"
