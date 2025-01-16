@@ -1,13 +1,15 @@
-export const API_BASE_URL = '';  // Use relative URLs for proxied requests
+// Use relative URLs for proxied requests
+export const API_BASE_URL = '';
 
 export const ENDPOINTS = {
   // Analytics endpoints
-  MUSCLE_TRACKING: '/analytics/muscle-tracking',
+  MUSCLE_TRACKING: '/api/analytics/muscle-tracking',
+  MUSCLE_VOLUME: '/api/analytics/muscle-volume',
   
   // Exercise endpoints
-  ANALYZE_EXERCISE: '/exercise/analyze',
-  ANALYZE_SENTIMENT: '/exercise/analyze/sentiment',
+  ANALYZE_EXERCISE: '/api/exercise/analyze',
+  ANALYZE_SENTIMENT: '/api/exercise/analyze/sentiment',
   
   // Chat endpoints
-  CHAT: '/api/chat',
+  CHAT: '/api/chat/',
 };

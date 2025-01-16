@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, TextField, Button, Paper, Typography, CircularProgress } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import SendIcon from '@mui/icons-material/Send';
+import { ENDPOINTS } from '../../config';
 
 interface Message {
   text: string;
@@ -23,7 +24,8 @@ export const WorkoutChat: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/chat', {
+      console.log('Sending request to:', ENDPOINTS.CHAT);
+      const response = await fetch(ENDPOINTS.CHAT, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -31,16 +33,28 @@ export const WorkoutChat: React.FC = () => {
         body: JSON.stringify({ message: input }),
       });
 
+      console.log('Response status:', response.status);
       if (!response.ok) {
-        throw new Error('Failed to get response');
+        const errorData = await response.text();
+        console.error('Server error:', errorData);
+        console.error('Response headers:', Object.fromEntries(response.headers.entries()));
+        throw new Error(`Server error: ${response.status} - ${errorData}`);
       }
 
       const data = await response.json();
+      console.log('Received response:', data);
       const botMessage = { text: data.message, sender: 'bot' as const };
       setMessages(prev => [...prev, botMessage]);
     } catch (error) {
-      console.error('Error:', error);
-      const errorMessage = { text: 'Sorry, I encountered an error. Please try again.', sender: 'bot' as const };
+      console.error('Error details:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      const errorMessage = { 
+        text: `Error: ${error instanceof Error ? error.message : 'Failed to connect to the chat service'}`, 
+        sender: 'bot' as const 
+      };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
