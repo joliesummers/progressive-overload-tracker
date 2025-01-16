@@ -15,8 +15,7 @@ export const sendMessage = async (message: string): Promise<ChatResponse> => {
   try {
     const response = await axios.post(`${API_BASE_URL}${ENDPOINTS.CHAT}`, 
       {
-        message,
-        model: 'anthropic.claude-3-haiku-20240307-v1:0', // Claude 3.5 Haiku model ID
+        message
       },
       {
         headers: {

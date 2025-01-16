@@ -40,3 +40,9 @@ export interface MuscleTrackingStatus {
   volume_trend: number;
   sets_last_week: number;
 }
+
+export interface MuscleVolumeData {
+  muscle_name: string;
+  total_volume: number;
+  date: string;
+}

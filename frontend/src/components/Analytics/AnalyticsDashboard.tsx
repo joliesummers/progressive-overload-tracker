@@ -9,8 +9,10 @@ import {
   CircularProgress,
 } from '@mui/material';
 import MuscleActivationChart from './MuscleActivationChart';
+import MuscleVolumeChart from './MuscleVolumeChart';
 import MuscleStatusCard from './MuscleStatusCard';
 import { useAnalytics } from '../../hooks/useAnalytics';
+import { useMuscleVolume } from '../../hooks/useMuscleVolume';
 
 interface AnalyticsDashboardProps {
   // muscleData: MuscleTrackingStatus[];
@@ -18,7 +20,8 @@ interface AnalyticsDashboardProps {
 
 const AnalyticsDashboard: React.FC = () => {
   const [timeframe, setTimeframe] = useState<'weekly' | 'monthly'>('weekly');
-  const { data: muscleData, isLoading, error } = useAnalytics();
+  const { data: muscleData, isLoading: muscleLoading, error: muscleError } = useAnalytics();
+  const { data: volumeData, isLoading: volumeLoading, error: volumeError } = useMuscleVolume(timeframe);
 
   const handleTimeframeChange = (
     _event: React.MouseEvent<HTMLElement>,
@@ -28,6 +31,9 @@ const AnalyticsDashboard: React.FC = () => {
       setTimeframe(newTimeframe);
     }
   };
+
+  const isLoading = muscleLoading || volumeLoading;
+  const error = muscleError || volumeError;
 
   if (isLoading) {
     return (
@@ -74,10 +80,18 @@ const AnalyticsDashboard: React.FC = () => {
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={8}>
-          <MuscleActivationChart
-            muscleData={muscleData}
-            timeframe={timeframe}
-          />
+          <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
+            <MuscleActivationChart
+              muscleData={muscleData}
+              timeframe={timeframe}
+            />
+          </Paper>
+          <Paper elevation={3} sx={{ p: 2 }}>
+            <MuscleVolumeChart
+              volumeData={volumeData || []}
+              timeframe={timeframe}
+            />
+          </Paper>
         </Grid>
         <Grid item xs={12} md={4}>
           <Paper elevation={3} sx={{ p: 2 }}>
