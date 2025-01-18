@@ -1,120 +1,75 @@
 import React from 'react';
 import {
+  Box,
   Card,
   CardContent,
   Typography,
+  Grid,
   LinearProgress,
-  Box,
-  Chip,
-  useTheme,
 } from '@mui/material';
 import { MuscleTrackingStatus } from '../../types/exercise';
 
 interface MuscleStatusCardProps {
-  status: MuscleTrackingStatus;
+  data: MuscleTrackingStatus[];
 }
 
-const MuscleStatusCard: React.FC<MuscleStatusCardProps> = ({ status }) => {
-  const theme = useTheme();
+const MuscleStatusCard: React.FC<MuscleStatusCardProps> = ({ data }) => {
+  if (!data || data.length === 0) {
+    return (
+      <Box sx={{ p: 2, textAlign: 'center' }}>
+        <Typography>No muscle tracking data available</Typography>
+      </Box>
+    );
+  }
 
-  const getRecoveryColor = (status: string) => {
-    switch (status) {
-      case 'Recovered':
-        return theme.palette.success.main;
-      case 'Recovering':
-        return theme.palette.warning.main;
-      case 'Fatigued':
-        return theme.palette.error.main;
-      default:
-        return theme.palette.grey[500];
-    }
+  // Calculate recovery percentage (inverse of days since last trained)
+  const getRecoveryPercentage = (days: number) => {
+    const maxDays = 7; // Consider fully recovered after 7 days
+    return Math.max(0, Math.min(100, ((maxDays - days) / maxDays) * 100));
   };
 
-  const getVolumeColor = (trend: number) => {
-    if (trend >= 4.0) return theme.palette.success.main;
-    if (trend >= 2.5) return theme.palette.warning.main;
-    return theme.palette.error.main;
-  };
-
-  const getRecoveryPercentage = (status: string) => {
-    switch (status) {
-      case 'Recovered':
-        return 100;
-      case 'Recovering':
-        return 60;
-      case 'Fatigued':
-        return 30;
-      default:
-        return 0;
-    }
+  // Get recovery status text
+  const getRecoveryStatus = (days: number) => {
+    if (days <= 1) return 'Recovering';
+    if (days <= 3) return 'Partially Recovered';
+    return 'Fully Recovered';
   };
 
   return (
-    <Card>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          {status.muscle_name}
-        </Typography>
-        
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Recovery Status
-          </Typography>
-          <Chip
-            label={status.recovery_status}
-            sx={{
-              bgcolor: getRecoveryColor(status.recovery_status),
-              color: 'white',
-              mt: 1,
-            }}
-          />
-          <LinearProgress
-            variant="determinate"
-            value={getRecoveryPercentage(status.recovery_status)}
-            sx={{
-              mt: 1,
-              height: 8,
-              borderRadius: 4,
-              bgcolor: theme.palette.grey[200],
-              '& .MuiLinearProgress-bar': {
-                bgcolor: getRecoveryColor(status.recovery_status),
-              },
-            }}
-          />
-        </Box>
-
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Volume Trend
-          </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={(status.volume_trend / 5) * 100}
-            sx={{
-              mt: 1,
-              height: 8,
-              borderRadius: 4,
-              bgcolor: theme.palette.grey[200],
-              '& .MuiLinearProgress-bar': {
-                bgcolor: getVolumeColor(status.volume_trend),
-              },
-            }}
-          />
-        </Box>
-
-        <Box sx={{ mb: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            Sets Last Week: {status.sets_last_week}
-          </Typography>
-        </Box>
-
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            Last Workout: {new Date(status.last_workout).toLocaleDateString()}
-          </Typography>
-        </Box>
-      </CardContent>
-    </Card>
+    <Box>
+      <Typography variant="h6" gutterBottom>
+        Muscle Recovery Status
+      </Typography>
+      <Grid container spacing={2}>
+        {data.map((muscle) => (
+          <Grid item xs={12} sm={6} md={4} key={muscle.muscle_name}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  {muscle.muscle_name}
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  Last trained: {new Date(muscle.last_trained).toLocaleDateString()}
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  Days since: {muscle.days_since_last_trained}
+                </Typography>
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    Recovery Status: {getRecoveryStatus(muscle.days_since_last_trained)}
+                  </Typography>
+                  <LinearProgress
+                    variant="determinate"
+                    value={getRecoveryPercentage(muscle.days_since_last_trained)}
+                    sx={{ mt: 1 }}
+                  />
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+    </Box>
   );
 };
 

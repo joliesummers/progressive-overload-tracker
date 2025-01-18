@@ -10,9 +10,11 @@ import {
 } from '@mui/material';
 import MuscleActivationChart from './MuscleActivationChart';
 import MuscleVolumeChart from './MuscleVolumeChart';
+import VolumeProgressionChart from './VolumeProgressionChart';
 import MuscleStatusCard from './MuscleStatusCard';
 import { useAnalytics } from '../../hooks/useAnalytics';
 import { useMuscleVolume } from '../../hooks/useMuscleVolume';
+import { useVolumeProgression } from '../../hooks/useVolumeProgression';
 
 interface AnalyticsDashboardProps {
   // muscleData: MuscleTrackingStatus[];
@@ -22,6 +24,7 @@ const AnalyticsDashboard: React.FC = () => {
   const [timeframe, setTimeframe] = useState<'weekly' | 'monthly'>('weekly');
   const { data: muscleData, isLoading: muscleLoading, error: muscleError } = useAnalytics();
   const { data: volumeData, isLoading: volumeLoading, error: volumeError } = useMuscleVolume(timeframe);
+  const { data: progressionData, isLoading: progressionLoading, error: progressionError } = useVolumeProgression(timeframe);
 
   const handleTimeframeChange = (
     _event: React.MouseEvent<HTMLElement>,
@@ -32,8 +35,8 @@ const AnalyticsDashboard: React.FC = () => {
     }
   };
 
-  const isLoading = muscleLoading || volumeLoading;
-  const error = muscleError || volumeError;
+  const isLoading = muscleLoading || volumeLoading || progressionLoading;
+  const error = muscleError || volumeError || progressionError;
 
   if (isLoading) {
     return (
@@ -81,30 +84,23 @@ const AnalyticsDashboard: React.FC = () => {
       <Grid container spacing={3}>
         <Grid item xs={12} md={8}>
           <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
-            <MuscleActivationChart
-              muscleData={muscleData}
-              timeframe={timeframe}
-            />
+            <MuscleStatusCard data={muscleData || []} />
           </Paper>
-          <Paper elevation={3} sx={{ p: 2 }}>
+          <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
             <MuscleVolumeChart
               volumeData={volumeData || []}
               timeframe={timeframe}
             />
           </Paper>
+          <Paper elevation={3} sx={{ p: 2 }}>
+            <VolumeProgressionChart
+              data={progressionData || []}
+            />
+          </Paper>
         </Grid>
         <Grid item xs={12} md={4}>
           <Paper elevation={3} sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Recovery Status
-            </Typography>
-            <Grid container spacing={2}>
-              {muscleData.map((muscle) => (
-                <Grid item xs={12} key={muscle.muscle_name}>
-                  <MuscleStatusCard status={muscle} />
-                </Grid>
-              ))}
-            </Grid>
+            <MuscleActivationChart data={muscleData || []} />
           </Paper>
         </Grid>
       </Grid>

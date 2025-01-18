@@ -2,8 +2,7 @@ import pytest
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from fastapi.testclient import TestClient
-from ...app.models.workout import Exercise, MuscleActivation
-from ...app.models.exercise import MuscleVolumeData
+from app.models.exercise import Exercise, MuscleActivation, MuscleVolumeData
 
 def test_get_muscle_volume_weekly(test_client: TestClient, test_db: Session):
     # Create test data

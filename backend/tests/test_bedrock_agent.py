@@ -1,96 +1,143 @@
-import os
-import sys
 import pytest
-from dotenv import load_dotenv
+import os
+import json
+from unittest.mock import AsyncMock, patch, MagicMock
+from app.services.bedrock_agent_service import BedrockAgentService
+import pytest_asyncio
+import botocore.response
+import aiohttp
 
-# Add the backend directory to the Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+class AsyncIterator:
+    def __init__(self, items):
+        self.items = items
 
-from backend.app.services.bedrock_agent_service import BedrockAgentService
+    def __aiter__(self):
+        return self
 
-# Load environment variables
-load_dotenv()
+    async def __anext__(self):
+        if not self.items:
+            raise StopAsyncIteration
+        return self.items.pop(0)
 
-@pytest.fixture
-def agent_service():
-    """Create a BedrockAgentService instance for testing"""
+class MockEventStream:
+    def __init__(self, events):
+        self.events = events
+        self.iterator = AsyncIterator(events)
+
+    def __aiter__(self):
+        return self.iterator
+
+class MockResponse:
+    def __init__(self, events):
+        self.events = events
+        self._stream = MockEventStream(events)
+
+    @property
+    def raw_stream(self):
+        return self._stream
+
+    @property
+    def status_code(self):
+        return 200
+
+@pytest_asyncio.fixture
+async def bedrock_service():
     return BedrockAgentService()
 
-def test_agent_basic_interaction(agent_service):
-    """Test basic interaction with the Bedrock agent"""
-    test_input = "I just did 3 sets of bench press at 135 lbs for 8 reps each"
+@pytest.mark.asyncio
+async def test_agent_basic_interaction(bedrock_service):
+    test_input = "I did 3 sets of 10 reps at 135 lbs on bench press"
+    mock_events = [{
+        "chunk": {
+            "bytes": json.dumps({
+                "content": "Great work! Here's the analysis:\nPrimary muscles: Chest (80%), Front Deltoids (60%), Triceps (50%)\nSecondary muscles: Core (30%), Shoulders (20%)"
+            }).encode()
+        }
+    }]
     
-    # Test basic agent invocation
-    response = agent_service.invoke_agent_with_retry(test_input)
-    assert response is not None
-    assert len(response) > 0
-    print(f"\nBasic Agent Response:\n{response}")
+    with patch('aioboto3.Session', new_callable=AsyncMock) as mock_session:
+        mock_client = AsyncMock()
+        mock_client.invoke_agent = AsyncMock(return_value=MockResponse(mock_events))
+        mock_session.return_value.client.return_value.__aenter__.return_value = mock_client
+        
+        result = await bedrock_service.invoke_agent(test_input)
+        
+        assert isinstance(result, dict)
+        assert "completion" in result
+        assert "muscle_data" in result
+        assert result["muscle_data"]["total_volume"] > 0
+        assert len(result["muscle_data"]["primary_muscles"]) > 0
+        assert len(result["muscle_data"]["secondary_muscles"]) > 0
 
-def test_agent_streaming(agent_service):
-    """Test streaming response from the Bedrock agent"""
-    test_input = "Analyze my workout: 4 sets of squats at 225 lbs for 5 reps each"
+@pytest.mark.asyncio
+async def test_agent_streaming(bedrock_service):
+    test_input = "I did 3 sets of 10 reps at 135 lbs on bench press"
+    mock_events = [
+        {
+            "chunk": {
+                "bytes": json.dumps({
+                    "content": "Processing your workout..."
+                }).encode()
+            }
+        },
+        {
+            "chunk": {
+                "bytes": json.dumps({
+                    "content": "Analysis complete!"
+                }).encode()
+            }
+        }
+    ]
     
-    # Collect streaming response
-    chunks = []
-    for chunk in agent_service.invoke_agent_streaming(test_input):
-        chunks.append(chunk)
-        print(chunk, end='', flush=True)
-    
-    # Verify streaming response
-    assert len(chunks) > 0
-    complete_response = ''.join(chunks)
-    assert len(complete_response) > 0
+    with patch('aioboto3.Session', new_callable=AsyncMock) as mock_session:
+        mock_client = AsyncMock()
+        mock_client.invoke_agent = AsyncMock(return_value=MockResponse(mock_events))
+        mock_session.return_value.client.return_value.__aenter__.return_value = mock_client
+        
+        responses = []
+        async for response in bedrock_service.invoke_agent_streaming(test_input):
+            responses.append(response)
+        
+        assert len(responses) == 2
+        assert "Processing your workout..." in responses[0]
+        assert "Analysis complete!" in responses[1]
 
-def test_agent_session_persistence(agent_service):
-    """Test agent session persistence with multiple interactions"""
-    session_id = "test-session-1"
+@pytest.mark.asyncio
+async def test_agent_retry_logic(bedrock_service):
+    test_input = "I did 3 sets of 10 reps at 135 lbs on bench press"
+    mock_events = [{
+        "chunk": {
+            "bytes": json.dumps({
+                "content": "Success after retry!"
+            }).encode()
+        }
+    }]
     
-    # First interaction
-    response1 = agent_service.invoke_agent(
-        "I did bench press today",
-        session_id
-    )
-    assert response1 is not None
-    
-    # Follow-up question in same session
-    response2 = agent_service.invoke_agent(
-        "How many exercises did I do?",
-        session_id
-    )
-    assert response2 is not None
-    
-    print(f"\nSession Test Results:")
-    print(f"Initial Response: {response1}")
-    print(f"Follow-up Response: {response2}")
+    with patch('aioboto3.Session', new_callable=AsyncMock) as mock_session:
+        mock_client = AsyncMock()
+        mock_client.invoke_agent = AsyncMock(side_effect=[
+            Exception("First attempt failed"),
+            Exception("Second attempt failed"),
+            MockResponse(mock_events)
+        ])
+        mock_session.return_value.client.return_value.__aenter__.return_value = mock_client
+        
+        result = await bedrock_service.invoke_agent(test_input)
+        assert isinstance(result, dict)
+        assert "completion" in result
+        assert "Success after retry!" in result["completion"]
 
-def test_agent_error_handling(agent_service):
-    """Test error handling and retry logic"""
-    # Test with invalid session ID format
-    with pytest.raises(Exception):
-        agent_service.invoke_agent("Test message", "invalid/session/id")
-    
-    # Test retry logic with a valid request
-    response = agent_service.invoke_agent_with_retry(
-        "Test retry logic: analyze 3 sets of deadlifts at 315 lbs"
-    )
-    assert response is not None
+@pytest.mark.asyncio
+async def test_volume_progression(bedrock_service):
+    result = await bedrock_service.get_volume_progression('weekly')
+    assert isinstance(result, list)
+    assert len(result) == 7  # One week of data
+    for data_point in result:
+        assert 'date' in data_point
+        assert 'total_volume' in data_point
+        assert 'chest_volume' in data_point
+        assert 'back_volume' in data_point
+        assert 'legs_volume' in data_point
 
 if __name__ == "__main__":
-    # Create service instance
-    service = BedrockAgentService()
-    
-    # Run tests
-    print("\nRunning Basic Interaction Test:")
-    test_agent_basic_interaction(service)
-    
-    print("\nRunning Streaming Test:")
-    test_agent_streaming(service)
-    
-    print("\nRunning Session Persistence Test:")
-    test_agent_session_persistence(service)
-    
-    try:
-        print("\nRunning Error Handling Test:")
-        test_agent_error_handling(service)
-    except Exception as e:
-        print(f"Expected error occurred: {str(e)}")
+    pytest.main([__file__])

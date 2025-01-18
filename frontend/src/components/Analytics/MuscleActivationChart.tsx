@@ -8,56 +8,49 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts';
-import { Box, Paper, Typography, useTheme } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { MuscleTrackingStatus } from '../../types/exercise';
 
 interface MuscleActivationChartProps {
-  muscleData: MuscleTrackingStatus[];
-  timeframe: 'weekly' | 'monthly';
+  data: MuscleTrackingStatus[];
 }
 
-const MuscleActivationChart: React.FC<MuscleActivationChartProps> = ({
-  muscleData,
-  timeframe,
-}) => {
-  const theme = useTheme();
+const MuscleActivationChart: React.FC<MuscleActivationChartProps> = ({ data }) => {
+  if (!data || data.length === 0) {
+    return (
+      <Box sx={{ p: 2, textAlign: 'center' }}>
+        <Typography>No muscle activation data available</Typography>
+      </Box>
+    );
+  }
 
-  const chartData = muscleData.map((muscle) => ({
+  // Transform data for radar chart
+  const chartData = data.map(muscle => ({
     muscle: muscle.muscle_name,
-    volume: timeframe === 'weekly' ? muscle.weekly_volume : muscle.monthly_volume,
-    fullMark: 100,
+    activity: 100 - muscle.days_since_last_trained, // Higher value means more recently trained
   }));
 
   return (
-    <Paper elevation={3} sx={{ p: 2, height: '400px' }}>
+    <Box sx={{ width: '100%', height: 400 }}>
       <Typography variant="h6" gutterBottom>
-        Muscle Activation {timeframe === 'weekly' ? 'This Week' : 'This Month'}
+        Muscle Activation Map
       </Typography>
-      <Box sx={{ width: '100%', height: '100%' }}>
-        <ResponsiveContainer>
-          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
-            <PolarGrid />
-            <PolarAngleAxis
-              dataKey="muscle"
-              tick={{ fill: theme.palette.text.primary }}
-            />
-            <PolarRadiusAxis
-              angle={30}
-              domain={[0, 100]}
-              tick={{ fill: theme.palette.text.primary }}
-            />
-            <Radar
-              name="Volume"
-              dataKey="volume"
-              stroke={theme.palette.primary.main}
-              fill={theme.palette.primary.main}
-              fillOpacity={0.6}
-            />
-            <Tooltip />
-          </RadarChart>
-        </ResponsiveContainer>
-      </Box>
-    </Paper>
+      <ResponsiveContainer>
+        <RadarChart data={chartData}>
+          <PolarGrid />
+          <PolarAngleAxis dataKey="muscle" />
+          <PolarRadiusAxis angle={30} domain={[0, 100]} />
+          <Radar
+            name="Activity Level"
+            dataKey="activity"
+            stroke="#8884d8"
+            fill="#8884d8"
+            fillOpacity={0.6}
+          />
+          <Tooltip />
+        </RadarChart>
+      </ResponsiveContainer>
+    </Box>
   );
 };
 

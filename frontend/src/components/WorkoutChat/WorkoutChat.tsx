@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { Box, TextField, Button, Paper, Typography, CircularProgress } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import SendIcon from '@mui/icons-material/Send';
-import { ENDPOINTS } from '../../config';
+import { bedrockService } from '../../services/bedrock';
 
 interface Message {
   text: string;
   sender: 'user' | 'bot';
+  isStreaming?: boolean;
+  muscleData?: any;
 }
 
 export const WorkoutChat: React.FC = () => {
@@ -24,110 +26,130 @@ export const WorkoutChat: React.FC = () => {
     setIsLoading(true);
 
     try {
-      console.log('Sending request to:', ENDPOINTS.CHAT);
-      const response = await fetch(ENDPOINTS.CHAT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      // Add an initial empty bot message that will be updated with streaming content
+      setMessages(prev => [...prev, { text: '', sender: 'bot', isStreaming: true }]);
+
+      await bedrockService.sendMessage(
+        input,
+        // Handle text chunks
+        (chunk: string) => {
+          setMessages(prev => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage.sender === 'bot') {
+              lastMessage.text += chunk;
+            }
+            return newMessages;
+          });
         },
-        body: JSON.stringify({ message: input }),
+        // Handle muscle data
+        (muscleData: any) => {
+          setMessages(prev => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage.sender === 'bot') {
+              lastMessage.muscleData = muscleData;
+            }
+            return newMessages;
+          });
+        }
+      );
+
+      // Mark the message as no longer streaming
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastMessage = newMessages[newMessages.length - 1];
+        if (lastMessage.sender === 'bot') {
+          lastMessage.isStreaming = false;
+        }
+        return newMessages;
       });
 
-      console.log('Response status:', response.status);
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('Server error:', errorData);
-        console.error('Response headers:', Object.fromEntries(response.headers.entries()));
-        throw new Error(`Server error: ${response.status} - ${errorData}`);
-      }
-
-      const data = await response.json();
-      console.log('Received response:', data);
-      const botMessage = { text: data.message, sender: 'bot' as const };
-      setMessages(prev => [...prev, botMessage]);
     } catch (error) {
-      console.error('Error details:', {
-        error,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
-      });
-      const errorMessage = { 
-        text: `Error: ${error instanceof Error ? error.message : 'Failed to connect to the chat service'}`, 
-        sender: 'bot' as const 
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      console.error('Error in chat:', error);
+      setMessages(prev => [
+        ...prev,
+        {
+          text: error instanceof Error ? error.message : 'An error occurred',
+          sender: 'bot'
+        }
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleKeyPress = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      handleSend();
-    }
+  const renderMessage = (message: Message, index: number) => {
+    return (
+      <Box
+        key={index}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: message.sender === 'user' ? 'flex-end' : 'flex-start',
+          mb: 2,
+        }}
+      >
+        <Paper
+          elevation={1}
+          sx={{
+            p: 2,
+            maxWidth: '70%',
+            backgroundColor: message.sender === 'user' ? theme.palette.primary.main : theme.palette.background.paper,
+            color: message.sender === 'user' ? theme.palette.primary.contrastText : theme.palette.text.primary,
+          }}
+        >
+          <Typography>{message.text}</Typography>
+          {message.isStreaming && (
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+              <CircularProgress size={16} />
+              <Typography variant="caption" sx={{ ml: 1 }}>
+                Thinking...
+              </Typography>
+            </Box>
+          )}
+          {message.muscleData && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" color="textSecondary">
+                Muscle Activation Analysis:
+              </Typography>
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                {JSON.stringify(message.muscleData, null, 2)}
+              </pre>
+            </Box>
+          )}
+        </Paper>
+      </Box>
+    );
   };
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Paper 
-        elevation={3} 
-        sx={{ 
-          flex: 1, 
-          mb: 2, 
-          p: 2, 
-          overflowY: 'auto',
-          bgcolor: theme.palette.background.default
-        }}
-      >
-        {messages.map((message, index) => (
-          <Box
-            key={index}
-            sx={{
-              display: 'flex',
-              justifyContent: message.sender === 'user' ? 'flex-end' : 'flex-start',
-              mb: 2
-            }}
+      <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
+        {messages.map(renderMessage)}
+      </Box>
+      
+      <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <TextField
+            fullWidth
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+            placeholder="Describe your workout..."
+            multiline
+            maxRows={4}
+            disabled={isLoading}
+          />
+          <Button
+            variant="contained"
+            onClick={handleSend}
+            disabled={isLoading || !input.trim()}
+            endIcon={<SendIcon />}
           >
-            <Paper
-              elevation={1}
-              sx={{
-                p: 2,
-                maxWidth: '70%',
-                bgcolor: message.sender === 'user' 
-                  ? theme.palette.primary.main 
-                  : theme.palette.background.paper,
-                color: message.sender === 'user' 
-                  ? theme.palette.primary.contrastText 
-                  : theme.palette.text.primary
-              }}
-            >
-              <Typography>{message.text}</Typography>
-            </Paper>
-          </Box>
-        ))}
-      </Paper>
-
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <TextField
-          fullWidth
-          multiline
-          maxRows={4}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="Type your message..."
-          disabled={isLoading}
-          sx={{ flex: 1 }}
-        />
-        <Button
-          variant="contained"
-          onClick={handleSend}
-          disabled={isLoading || !input.trim()}
-          sx={{ minWidth: 100 }}
-        >
-          {isLoading ? <CircularProgress size={24} /> : <SendIcon />}
-        </Button>
+            Send
+          </Button>
+        </Box>
       </Box>
     </Box>
   );

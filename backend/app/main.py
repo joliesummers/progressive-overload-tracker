@@ -5,11 +5,12 @@ from .routes.analytics import router as analytics_router
 from .routes.exercise import router as exercise_router
 from .routes.workout import router as workout_router
 from .routes.test import router as test_router
-from .models.database import engine, Base
+from .database import engine, Base
 from .models.user import User
-from .models.workout import WorkoutSession, Exercise, ExerciseSet, MuscleActivation
+from .models.exercise import WorkoutSession, Exercise, MuscleActivation
 from .middleware.request_logging import request_logging_middleware
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -17,19 +18,26 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://frontend:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    max_age=3600,
+)
+
+# Create database tables only if not testing
+if not os.getenv("TESTING", "false").lower() == "true":
+    Base.metadata.create_all(bind=engine)
 
 # Add middleware in order
 app.middleware("http")(request_logging_middleware)  # Add request logging first
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
-)
 
 # Print startup message
 @app.on_event("startup")
@@ -73,7 +81,7 @@ logger.debug("Registering exercise router...")
 app.include_router(exercise_router, prefix="/api/exercise", tags=["exercise"])
 
 logger.debug("Registering workout router...")
-app.include_router(workout_router, prefix="/api/workout", tags=["workout"])
+app.include_router(workout_router, prefix="/api/workout", tags=["workout"], responses={404: {"description": "Not found"}})
 
 # Debug print all routes after all routers are registered
 logger.debug("=== All Registered Routes ===")
@@ -84,3 +92,7 @@ logger.debug("===========================")
 @app.get("/api/")
 async def root():
     return {"message": "Progressive Overload Backend API"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}

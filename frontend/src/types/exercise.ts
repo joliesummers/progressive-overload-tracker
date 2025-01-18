@@ -35,14 +35,19 @@ export interface WorkoutSession {
 
 export interface MuscleTrackingStatus {
   muscle_name: string;
-  last_workout: string;
-  recovery_status: 'Recovered' | 'Recovering' | 'Fatigued';
-  volume_trend: number;
-  sets_last_week: number;
+  last_trained: string;
+  days_since_last_trained: number;
 }
 
 export interface MuscleVolumeData {
   muscle_name: string;
   total_volume: number;
   date: string;
+}
+
+export interface VolumeProgressionData {
+  muscle_name: string;
+  date: string;
+  total_volume: number;
+  exercise_count: number;
 }

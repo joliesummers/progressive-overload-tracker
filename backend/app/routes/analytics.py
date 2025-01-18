@@ -1,13 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import List, Dict
+from fastapi.responses import StreamingResponse
+from typing import List, Dict, AsyncGenerator
 from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Date
 from datetime import datetime, timedelta
-from ..models.workout import WorkoutSession, Exercise, MuscleActivation
+from ..models.exercise import (
+    WorkoutSession, 
+    Exercise, 
+    MuscleActivation,
+    MuscleTracking,
+    MuscleVolumeData
+)
 from ..models.database import get_db
-from pydantic import BaseModel, Field
-from ..models.exercise import MuscleTrackingStatus, MuscleVolumeData
+from ..schemas.muscle import MuscleTrackingResponse, MuscleVolumeResponse, VolumeProgressionResponse
+from ..services.bedrock_agent_service import BedrockAgentService
+from ..services.workout_storage_service import WorkoutStorageService
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -18,107 +27,93 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+# Initialize BedrockAgentService
+bedrock_service = BedrockAgentService()
+
+def get_storage_service(db: Session = Depends(get_db)) -> WorkoutStorageService:
+    """Dependency to get WorkoutStorageService instance"""
+    return WorkoutStorageService(db)
+
+async def stream_response(response_stream: AsyncGenerator) -> AsyncGenerator[bytes, None]:
+    """Stream the response chunks"""
+    try:
+        async for chunk in response_stream:
+            if chunk:
+                yield json.dumps(chunk).encode() + b"\n"
+    except Exception as e:
+        logger.error(f"Error streaming response: {str(e)}")
+        yield json.dumps({"error": str(e)}).encode()
+
 @router.get("/test", response_model=dict)
 async def test_analytics():
     """Test endpoint to verify analytics router is working"""
     return {"status": "Analytics router is working"}
 
-@router.get("/muscle-tracking", response_model=List[MuscleTrackingStatus])
-async def get_muscle_tracking(db: Session = Depends(get_db)):
+@router.get("/muscle-tracking", response_model=List[MuscleTrackingResponse])
+async def get_muscle_tracking(
+    user_id: int = Query(..., description="User ID to get tracking data for"),
+    storage_service: WorkoutStorageService = Depends(get_storage_service)
+):
     """Get tracking data for all muscles worked in the past month"""
     try:
-        # Calculate the date one month ago
-        one_month_ago = datetime.utcnow() - timedelta(days=30)
-        
-        # Query for distinct muscles and their most recent activation
-        recent_activations = (
-            db.query(
-                MuscleActivation.muscle_name,
-                func.max(Exercise.timestamp).label("last_trained")
-            )
-            .join(Exercise, MuscleActivation.exercise_id == Exercise.id)
-            .filter(Exercise.timestamp >= one_month_ago)
-            .group_by(MuscleActivation.muscle_name)
-            .all()
-        )
-        
-        # Convert to response model
-        tracking_status = []
-        for muscle_name, last_trained in recent_activations:
-            tracking_status.append(
-                MuscleTrackingStatus(
-                    muscle_name=muscle_name,
-                    last_trained=last_trained,
-                    days_since_last_trained=(datetime.utcnow() - last_trained).days
-                )
-            )
-        
-        return tracking_status
-        
+        tracking_data = storage_service.get_muscle_tracking(user_id=user_id)
+        return tracking_data
     except Exception as e:
-        logger.error(f"Error in get_muscle_tracking: {str(e)}")
-        raise HTTPException(status_code=500, detail="Error retrieving muscle tracking data")
+        logger.error(f"Error getting muscle tracking data: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/muscle-volume", response_model=List[MuscleVolumeData])
+@router.get("/muscle-volume", response_model=List[MuscleVolumeResponse])
 async def get_muscle_volume(
+    user_id: int = Query(..., description="User ID to get volume data for"),
     timeframe: str = Query(..., regex="^(weekly|monthly)$"),
-    db: Session = Depends(get_db)
+    storage_service: WorkoutStorageService = Depends(get_storage_service)
 ):
     """Get volume data for all muscles worked in the specified timeframe"""
     try:
-        # Calculate the start date based on timeframe
-        days = 7 if timeframe == "weekly" else 30
-        start_date = datetime.utcnow() - timedelta(days=days)
-        
-        # Query for muscle volumes aggregated by date
-        volume_data = (
-            db.query(
-                MuscleActivation.muscle_name,
-                cast(Exercise.timestamp, Date).label("date"),
-                func.sum(
-                    MuscleActivation.estimated_volume
-                ).label("total_volume")
-            )
-            .join(Exercise, MuscleActivation.exercise_id == Exercise.id)
-            .filter(Exercise.timestamp >= start_date)
-            .group_by(
-                MuscleActivation.muscle_name,
-                cast(Exercise.timestamp, Date)
-            )
-            .order_by(
-                MuscleActivation.muscle_name,
-                cast(Exercise.timestamp, Date).desc()
-            )
-            .all()
-        )
-        
-        # Convert to response model
-        return [
-            MuscleVolumeData(
-                muscle_name=muscle_name,
-                total_volume=round(float(total_volume), 2),
-                date=date
-            )
-            for muscle_name, date, total_volume in volume_data
-        ]
-        
+        volume_data = storage_service.get_muscle_volume_data(timeframe, user_id=user_id)
+        return volume_data
     except Exception as e:
-        logger.error(f"Error in get_muscle_volume: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Error retrieving muscle volume data"
-        )
+        logger.error(f"Error getting muscle volume data: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/minimal-test", response_model=dict)
+@router.get("/volume-progression", response_model=VolumeProgressionResponse)
+async def get_volume_progression(
+    user_id: int = Query(..., description="User ID to get progression data for"),
+    timeframe: str = Query("weekly", description="Timeframe for progression analysis"),
+    storage_service: WorkoutStorageService = Depends(get_storage_service)
+):
+    """Get progression data for muscle volume over time"""
+    try:
+        volume_data = storage_service.get_muscle_volume_data(timeframe, user_id=user_id)
+        
+        # Process the data for visualization
+        progression_data = {}
+        for entry in volume_data:
+            if entry.muscle_name not in progression_data:
+                progression_data[entry.muscle_name] = []
+            progression_data[entry.muscle_name].append({
+                "date": entry.date.isoformat(),
+                "volume": entry.total_volume
+            })
+        
+        return progression_data
+    except Exception as e:
+        logger.error(f"Error getting volume progression data: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/test/minimal")
 async def minimal_test():
     """Minimal test endpoint"""
     return {"message": "Minimal test endpoint working"}
 
-@router.get("/test-volume", response_model=dict)
+@router.get("/test/volume")
 async def test_volume():
     """Simple test endpoint"""
-    logger.debug("Received request for test volume endpoint")
     return {
-        "message": "Volume test endpoint working",
-        "timestamp": datetime.utcnow()
+        "message": "Test volume endpoint working",
+        "data": {
+            "chest": 1000,
+            "back": 1200,
+            "legs": 1500
+        }
     }
