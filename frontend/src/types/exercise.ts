@@ -45,9 +45,17 @@ export interface MuscleVolumeData {
   date: string;
 }
 
+export interface VolumeDataPoint {
+  date: string;
+  volume: number;
+}
+
+export interface VolumeProgressionResponse {
+  [muscleName: string]: VolumeDataPoint[];
+}
+
 export interface VolumeProgressionData {
   muscle_name: string;
   date: string;
   total_volume: number;
-  exercise_count: number;
 }

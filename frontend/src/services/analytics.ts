@@ -1,4 +1,4 @@
-import { MuscleTrackingStatus, MuscleVolumeData, VolumeProgressionData } from '../types/exercise';
+import { MuscleTrackingStatus, MuscleVolumeData, VolumeProgressionData, VolumeProgressionResponse } from '../types/exercise';
 import { API_BASE_URL, ENDPOINTS } from '../config';
 
 export const fetchMuscleData = async (): Promise<MuscleTrackingStatus[]> => {
@@ -49,5 +49,16 @@ export const fetchVolumeProgressionData = async (timeframe: 'weekly' | 'monthly'
     throw new Error('Failed to fetch volume progression data');
   }
 
-  return response.json();
+  const data: VolumeProgressionResponse = await response.json();
+  
+  // Transform the data into the expected format
+  const transformedData: VolumeProgressionData[] = Object.entries(data).flatMap(([muscleName, dataPoints]) =>
+    dataPoints.map(point => ({
+      muscle_name: muscleName,
+      date: point.date,
+      total_volume: point.volume,
+    }))
+  );
+
+  return transformedData;
 };

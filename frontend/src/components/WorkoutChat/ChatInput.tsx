@@ -2,8 +2,8 @@ import React, { useState, KeyboardEvent } from 'react';
 import { 
   Box, 
   TextField, 
+  Button,
   IconButton, 
-  Paper,
   useTheme,
   Tooltip
 } from '@mui/material';
@@ -45,50 +45,101 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    handleSend();
+  };
+
+  const handleVoice = () => {
+    if (isRecording) {
+      onStopRecording?.();
+    } else {
+      onStartRecording?.();
+    }
+  };
+
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        p: 2,
-        backgroundColor: theme.palette.background.paper,
+    <Box 
+      sx={{ 
+        p: 2, 
+        bgcolor: 'background.paper',
+        borderTop: 1,
+        borderColor: 'divider'
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <TextField
-          fullWidth
-          multiline
-          maxRows={4}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="Enter your workout details..."
-          disabled={isLoading}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              borderRadius: 2,
-            },
-          }}
-        />
-        {onStartRecording && onStopRecording && (
-          <Tooltip title={isRecording ? 'Stop Recording' : 'Start Recording'}>
-            <IconButton
-              color={isRecording ? 'secondary' : 'primary'}
-              onClick={isRecording ? onStopRecording : onStartRecording}
-              disabled={isLoading}
-            >
-              {isRecording ? <StopIcon /> : <MicIcon />}
-            </IconButton>
-          </Tooltip>
-        )}
-        <IconButton
-          color="primary"
-          onClick={handleSend}
-          disabled={!message.trim() || isLoading}
-        >
-          <SendIcon />
-        </IconButton>
-      </Box>
-    </Paper>
+      <form onSubmit={handleSubmit}>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <TextField
+            fullWidth
+            multiline
+            maxRows={4}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Describe your workout..."
+            disabled={isLoading}
+            helperText="Describe your workout or ask for advice"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                bgcolor: 'background.paper',
+                color: 'text.primary',
+                '& input, & textarea': {
+                  color: 'text.primary',
+                  '&::placeholder': {
+                    color: 'text.secondary',
+                    opacity: '1 !important',
+                  },
+                },
+                '& fieldset': {
+                  borderColor: 'rgba(255,255,255,0.1)',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'rgba(255,255,255,0.2)',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: 'primary.main',
+                },
+              },
+              '& .MuiFormHelperText-root': {
+                color: 'text.secondary',
+                marginLeft: 0,
+                marginTop: 1,
+              },
+            }}
+          />
+          {onStartRecording && onStopRecording && (
+            <Tooltip title={isRecording ? 'Stop Recording' : 'Start Recording'}>
+              <IconButton 
+                onClick={handleVoice}
+                color={isRecording ? "error" : "primary"}
+                disabled={isLoading}
+                sx={{
+                  bgcolor: 'background.paper',
+                  '&:hover': {
+                    bgcolor: 'background.default',
+                  },
+                }}
+              >
+                {isRecording ? <StopIcon /> : <MicIcon />}
+              </IconButton>
+            </Tooltip>
+          )}
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleSend}
+            disabled={!message.trim() || isLoading}
+            sx={{
+              height: 'fit-content',
+              alignSelf: 'flex-start',
+              minWidth: '80px',
+            }}
+          >
+            Send
+          </Button>
+        </Box>
+      </form>
+    </Box>
   );
 };
 

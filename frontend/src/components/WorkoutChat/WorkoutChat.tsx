@@ -99,21 +99,21 @@ export const WorkoutChat: React.FC = () => {
             color: message.sender === 'user' ? theme.palette.primary.contrastText : theme.palette.text.primary,
           }}
         >
-          <Typography>{message.text}</Typography>
+          <Typography sx={{ color: '#fff' }}>{message.text}</Typography>
           {message.isStreaming && (
             <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
               <CircularProgress size={16} />
-              <Typography variant="caption" sx={{ ml: 1 }}>
+              <Typography variant="caption" sx={{ ml: 1, color: 'rgba(255,255,255,0.7)' }}>
                 Thinking...
               </Typography>
             </Box>
           )}
           {message.muscleData && (
             <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" color="textSecondary">
+              <Typography variant="subtitle2" color="textSecondary" sx={{ color: '#fff' }}>
                 Muscle Activation Analysis:
               </Typography>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', color: '#fff' }}>
                 {JSON.stringify(message.muscleData, null, 2)}
               </pre>
             </Box>
@@ -124,31 +124,73 @@ export const WorkoutChat: React.FC = () => {
   };
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
-        {messages.map(renderMessage)}
-      </Box>
-      
-      <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <TextField
-            fullWidth
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder="Describe your workout..."
-            multiline
-            maxRows={4}
-            disabled={isLoading}
-          />
-          <Button
-            variant="contained"
-            onClick={handleSend}
-            disabled={isLoading || !input.trim()}
-            endIcon={<SendIcon />}
-          >
-            Send
-          </Button>
+    <Box
+      sx={{
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        bgcolor: '#000000',
+        p: 3,
+      }}
+    >
+      <Typography variant="h5" gutterBottom sx={{ color: '#fff', mb: 3 }}>
+        Workout Chat
+      </Typography>
+      <Box
+        sx={{
+          flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          bgcolor: '#1e1e1e',
+          borderRadius: 2,
+          overflow: 'hidden',
+        }}
+      >
+        <Box
+          sx={{
+            flexGrow: 1,
+            overflow: 'auto',
+            p: 2,
+            bgcolor: '#1e1e1e',
+          }}
+        >
+          {messages.map((message, index) => renderMessage(message, index))}
+          {isLoading && (
+            <Typography sx={{ color: 'rgba(255,255,255,0.7)', p: 2, textAlign: 'center' }}>
+              Thinking...
+            </Typography>
+          )}
+        </Box>
+        <Box 
+          sx={{ 
+            borderTop: 1, 
+            borderColor: 'divider',
+            bgcolor: '#1e1e1e',
+            p: 2,
+          }}
+        >
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              fullWidth
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+              placeholder="Describe your workout..."
+              multiline
+              maxRows={4}
+              disabled={isLoading}
+              sx={{ color: '#fff' }}
+            />
+            <Button
+              variant="contained"
+              onClick={handleSend}
+              disabled={isLoading || !input.trim()}
+              endIcon={<SendIcon />}
+              sx={{ color: '#fff' }}
+            >
+              Send
+            </Button>
+          </Box>
         </Box>
       </Box>
     </Box>

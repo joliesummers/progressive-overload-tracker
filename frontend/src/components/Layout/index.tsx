@@ -27,8 +27,31 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   ];
 
   return (
-    <Box sx={{ display: 'flex' }}>
-      <AppBar position="fixed">
+    <Box sx={{ 
+      display: 'flex',
+      bgcolor: '#000000',
+      minHeight: '100vh',
+      '& .MuiInputBase-root': {
+        color: '#fff',
+      },
+      '& .MuiFormHelperText-root': {
+        color: 'rgba(255,255,255,0.7)',
+      },
+      '& .MuiButton-root': {
+        color: '#fff',
+      },
+    }}>
+      <AppBar 
+        position="fixed"
+        sx={{ 
+          bgcolor: '#000000',
+          borderBottom: 1,
+          borderColor: 'divider',
+          '& .MuiTypography-root': {
+            color: '#fff',
+          },
+        }}
+      >
         <Toolbar>
           <IconButton
             color="inherit"
@@ -52,7 +75,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         sx={{
           '& .MuiDrawer-paper': { 
             width: 240,
-            backgroundColor: theme.palette.background.default 
+            bgcolor: '#1e1e1e',
+            borderRight: 1,
+            borderColor: 'divider',
+            '& .MuiTypography-root': {
+              color: '#fff',
+            },
+            '& .MuiListItemIcon-root': {
+              color: '#fff',
+            },
           },
         }}
       >
@@ -63,8 +94,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               button 
               key={item.text} 
               onClick={() => handleNavigation(item.path)}
+              sx={{
+                '&:hover': {
+                  bgcolor: 'rgba(255,255,255,0.1)',
+                },
+              }}
             >
-              <ListItemIcon>{item.icon}</ListItemIcon>
+              <ListItemIcon sx={{ color: '#fff' }}>{item.icon}</ListItemIcon>
               <ListItemText primary={item.text} />
             </ListItem>
           ))}
@@ -75,14 +111,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
           width: '100%',
           minHeight: '100vh',
-          backgroundColor: theme.palette.background.default,
-          marginTop: '64px',
+          bgcolor: '#000000',
+          mt: '64px',
         }}
       >
-        <Toolbar />
         {children}
       </Box>
     </Box>

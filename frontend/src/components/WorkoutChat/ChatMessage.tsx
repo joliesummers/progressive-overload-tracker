@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Paper, Typography, useTheme } from '@mui/material';
+import { Box, Typography, useTheme } from '@mui/material';
 
 interface ChatMessageProps {
   message: string;
@@ -7,10 +7,13 @@ interface ChatMessageProps {
   timestamp?: Date;  
 }
 
+const formatTimestamp = (timestamp: Date | undefined) => {
+  if (!timestamp) return '';
+  return new Date(timestamp).toLocaleTimeString();
+};
+
 const ChatMessage: React.FC<ChatMessageProps> = ({ message, isUser, timestamp }) => {
   const theme = useTheme();
-
-  const formattedMessage = typeof message === 'string' ? message : JSON.stringify(message);
 
   return (
     <Box
@@ -20,28 +23,38 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isUser, timestamp })
         mb: 2,
       }}
     >
-      <Paper
-        elevation={1}
+      <Box
         sx={{
           maxWidth: '70%',
-          p: 2,
-          backgroundColor: isUser ? theme.palette.primary.main : theme.palette.background.paper,
+          bgcolor: isUser ? 'primary.main' : '#2d2d2d',
           borderRadius: 2,
+          p: 2,
         }}
       >
-        <Typography variant="body1" color={isUser ? 'white' : 'inherit'}>
-          {formattedMessage}
+        <Typography
+          variant="body1"
+          sx={{
+            color: '#fff',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+        >
+          {message}
         </Typography>
         {timestamp && (
           <Typography
             variant="caption"
-            color={isUser ? 'rgba(255,255,255,0.7)' : 'text.secondary'}
-            sx={{ display: 'block', mt: 1 }}
+            sx={{
+              color: 'rgba(255,255,255,0.7)',
+              display: 'block',
+              mt: 1,
+              textAlign: isUser ? 'right' : 'left',
+            }}
           >
-            {timestamp.toLocaleTimeString()}
+            {formatTimestamp(timestamp)}
           </Typography>
         )}
-      </Paper>
+      </Box>
     </Box>
   );
 };

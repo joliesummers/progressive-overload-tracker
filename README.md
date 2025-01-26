@@ -213,6 +213,62 @@ The system includes robust error handling for:
 
 For more details on the implementation, see the [Chat Integration Status](TODO.md#chat-integration-status) section in TODO.md.
 
+## Analytics Dashboard
+
+### Muscle Activation Map
+
+The Muscle Activation Map provides a visual representation of how well each muscle group is being trained. The visualization uses a radar chart where each axis represents a different muscle group. The further a point extends from the center, the better that muscle is being trained.
+
+#### Activation Score Calculation
+
+The activation score for each muscle is calculated using three key metrics, resulting in a score from 0-100:
+
+1. **Volume Score (40% weight)**
+   - Normalized based on the highest volume among all muscles
+   - If a muscle has the highest volume, it gets 100 points
+   - Other muscles are scored proportionally
+   - Example: If Quads have 10,000 volume (highest) and Glutes have 5,000:
+     * Quads = 100 points
+     * Glutes = 50 points
+
+2. **Frequency Score (40% weight)**
+   - Based on the number of different exercises targeting the muscle
+   - Each exercise contributes 25 points (capped at 100)
+   - Score breakdown:
+     * 1 exercise = 25 points
+     * 2 exercises = 50 points
+     * 3 exercises = 75 points
+     * 4+ exercises = 100 points
+
+3. **Recovery Score (20% weight)**
+   - Based on the muscle's recovery status
+   - Fully recovered = 100 points
+   - Partially recovered = proportional points
+   - Example: 50% recovered = 50 points
+
+#### Final Score Calculation
+```
+Final Score = (Volume Score × 0.4) + (Frequency Score × 0.4) + (Recovery Score × 0.2)
+```
+
+#### Interpreting the Visualization
+
+- **Longer Spikes** = Better trained muscles
+- **Shorter Spikes** = Muscles needing more attention
+- **Perfect Circle** = Perfectly balanced training
+- **Irregular Shape** = Some muscle groups need more focus
+
+Hover over any point to see detailed metrics including:
+- Actual volume numbers
+- Number of exercises targeting the muscle
+- Current recovery status
+
+Use this visualization to:
+- Identify underworked muscle groups
+- Ensure balanced training across all muscles
+- Monitor recovery status
+- Guide exercise selection for upcoming workouts
+
 ## Data Pipeline
 
 The Progressive Overload app uses a sophisticated data pipeline for processing workout data:
