@@ -67,24 +67,35 @@ print_result "Get Exercise Details"
 
 # Test 5: Verify array fields
 echo "Test 5: Verifying array fields"
-REPS_ARRAY=$(echo "$EXERCISE_RESPONSE" | jq -r '.reps')
-WEIGHT_ARRAY=$(echo "$EXERCISE_RESPONSE" | jq -r '.weight')
-
+EXERCISE_RESPONSE=$(curl -s -X GET "http://localhost:8000/api/exercise/$EXERCISE_ID")
 echo "Raw Exercise Response: $EXERCISE_RESPONSE"
+
+# Extract arrays
+REPS_ARRAY=$(echo "$EXERCISE_RESPONSE" | jq -c '.reps')
+WEIGHT_ARRAY=$(echo "$EXERCISE_RESPONSE" | jq -c '.weight')
 echo "Reps Array: $REPS_ARRAY"
 echo "Weight Array: $WEIGHT_ARRAY"
 
-if [[ $REPS_ARRAY == "[10,8,6]" ]]; then
-    echo -e "${GREEN}✓ Reps array verified${NC}"
+# Expected arrays
+EXPECTED_REPS='[10,8,6]'
+EXPECTED_WEIGHTS='[135,155,175]'
+
+# Compare arrays
+if [ "$REPS_ARRAY" = "$EXPECTED_REPS" ]; then
+    echo -e "${GREEN}✓ Reps array matches expected: $REPS_ARRAY${NC}"
 else
-    echo -e "${RED}✗ Reps array incorrect: $REPS_ARRAY${NC}"
+    echo -e "${RED}✗ Reps array mismatch. Expected: $EXPECTED_REPS, Got: $REPS_ARRAY${NC}"
+    TEST_FAILED=1
 fi
 
-if [[ $WEIGHT_ARRAY == "[135,155,175]" ]]; then
-    echo -e "${GREEN}✓ Weight array verified${NC}"
+if [ "$WEIGHT_ARRAY" = "$EXPECTED_WEIGHTS" ]; then
+    echo -e "${GREEN}✓ Weight array matches expected: $WEIGHT_ARRAY${NC}"
 else
-    echo -e "${RED}✗ Weight array incorrect: $WEIGHT_ARRAY${NC}"
+    echo -e "${RED}✗ Weight array mismatch. Expected: $EXPECTED_WEIGHTS, Got: $WEIGHT_ARRAY${NC}"
+    TEST_FAILED=1
 fi
+
+[ "$TEST_FAILED" != "1" ]
 print_result "Array Field Verification"
 
 # Test 6: End workout session

@@ -91,10 +91,27 @@ async def chat(
         session = workout_storage.create_workout_session(user_id)
         
         # Store exercise data
+        exercises = structured_data.get('exercises', [])
+        if not exercises:
+            raise ValueError("No exercises found in structured data")
+            
+        exercise_data = exercises[0]  # Get first exercise
         exercise = workout_storage.store_exercise_data(
             session_id=session.id,
-            exercise_name="",  # This will be taken from structured_data
-            muscle_data=structured_data
+            name=exercise_data.get('name', 'Unknown Exercise'),
+            movement_pattern=exercise_data.get('movement_pattern'),
+            notes=exercise_data.get('notes'),
+            num_sets=exercise_data.get('num_sets'),
+            reps=exercise_data.get('reps'),
+            weight=exercise_data.get('weight'),
+            rpe=exercise_data.get('rpe'),
+            tempo=exercise_data.get('tempo'),
+            total_volume=exercise_data.get('total_volume'),
+            equipment=exercise_data.get('equipment'),
+            difficulty=exercise_data.get('difficulty'),
+            estimated_duration=exercise_data.get('estimated_duration'),
+            rest_period=exercise_data.get('rest_period'),
+            muscle_activations=exercise_data.get('muscle_activations')
         )
         
         # End the session

@@ -3,14 +3,15 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from sqlalchemy import func, cast, Date
 from ..models.exercise import (
-    WorkoutSession, 
-    Exercise, 
+    Exercise,
+    WorkoutSession,
     MuscleActivation,
     MuscleActivationLevel
 )
-import traceback
 import logging
 import json
+import traceback
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,7 @@ class WorkoutStorageService:
             logger.error(f"Error ending workout session: {str(e)}")
             raise
 
-    async def store_exercise_data(
+    def store_exercise_data(
         self,
         session_id: int,
         name: str,

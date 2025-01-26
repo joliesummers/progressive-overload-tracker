@@ -79,7 +79,7 @@ class IntegrationService:
                 logger.debug(f"Processing exercise: {exercise_data}")
                 
                 # Store exercise data
-                exercise = await workout_storage.store_exercise_data(
+                exercise = workout_storage.store_exercise_data(
                     session_id=session_id,
                     name=exercise_data.get("name"),
                     movement_pattern=exercise_data.get("movement_pattern"),
