@@ -98,11 +98,12 @@ async def get_volume_progression(
         # Process the data for visualization
         progression_data = {}
         for entry in volume_data:
-            if entry.muscle_name not in progression_data:
-                progression_data[entry.muscle_name] = []
-            progression_data[entry.muscle_name].append({
-                "date": entry.date.isoformat(),
-                "volume": entry.total_volume
+            muscle_name = entry["muscle_name"]
+            if muscle_name not in progression_data:
+                progression_data[muscle_name] = []
+            progression_data[muscle_name].append({
+                "date": entry["date"].isoformat(),
+                "volume": entry["total_volume"]
             })
         
         logger.info(f"Processed data for {len(progression_data)} muscles")

@@ -17,6 +17,20 @@ interface VolumeProgressionChartProps {
 }
 
 const VolumeProgressionChart: React.FC<VolumeProgressionChartProps> = ({ data }) => {
+  // Handle empty or undefined data
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    return (
+      <Paper sx={{ p: 2, height: '400px' }}>
+        <Typography variant="h6" gutterBottom>
+          Volume Progression
+        </Typography>
+        <Box sx={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <Typography color="textSecondary">No volume data available</Typography>
+        </Box>
+      </Paper>
+    );
+  }
+
   // Group data by muscle name
   const groupedData = data.reduce((acc, item) => {
     const date = new Date(item.date).toLocaleDateString();

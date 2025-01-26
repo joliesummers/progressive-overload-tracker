@@ -94,7 +94,7 @@ const AnalyticsDashboard: React.FC = () => {
           </Paper>
           <Paper elevation={3} sx={{ p: 2 }}>
             <VolumeProgressionChart
-              data={progressionData || []}
+              data={progressionData?.length ? progressionData : []}
             />
           </Paper>
         </Grid>

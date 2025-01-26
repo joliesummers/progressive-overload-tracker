@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
-from sqlalchemy import func, cast, Date
+from sqlalchemy import func, cast, Date, case
 from ..models.exercise import (
     Exercise,
     WorkoutSession,
@@ -213,14 +213,27 @@ class WorkoutStorageService:
     def get_muscle_tracking(self, days: int = 30, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get tracking data for all muscles worked in the past N days"""
         cutoff_date = datetime.utcnow() - timedelta(days=days)
+        week_start = datetime.utcnow() - timedelta(days=datetime.utcnow().weekday())
         
         # Base query
         query = (
             self.db.query(
+                MuscleActivation.id,
                 MuscleActivation.muscle_name,
                 func.sum(MuscleActivation.estimated_volume).label("total_volume"),
                 func.count(MuscleActivation.id).label("exercise_count"),
-                func.max(WorkoutSession.start_time).label("last_trained")
+                func.max(WorkoutSession.start_time).label("last_trained"),
+                # Get weekly volume
+                func.sum(case(
+                    (WorkoutSession.start_time >= week_start, MuscleActivation.estimated_volume),
+                    else_=0
+                )).label("weekly_volume"),
+                # Get monthly volume
+                func.sum(case(
+                    (WorkoutSession.start_time >= cutoff_date, MuscleActivation.estimated_volume),
+                    else_=0
+                )).label("monthly_volume"),
+                WorkoutSession.user_id
             )
             .select_from(MuscleActivation)
             .join(Exercise)
@@ -235,13 +248,17 @@ class WorkoutStorageService:
         
         # Execute query with grouping
         activations = (
-            query.group_by(MuscleActivation.muscle_name)
+            query.group_by(
+                MuscleActivation.id,
+                MuscleActivation.muscle_name,
+                WorkoutSession.user_id
+            )
             .all()
         )
         
         # Debug logging
         if not activations:
-            print("No muscle activations found")
+            logger.warning("No muscle activations found")
             # Check if there are any workout sessions
             sessions = (
                 self.db.query(WorkoutSession)
@@ -249,7 +266,7 @@ class WorkoutStorageService:
                 .filter(WorkoutSession.end_time.isnot(None))
                 .all()
             )
-            print(f"Found {len(sessions)} completed workout sessions")
+            logger.info(f"Found {len(sessions)} completed workout sessions")
         
         tracking_data = []
         for activation in activations:
@@ -259,11 +276,18 @@ class WorkoutStorageService:
                 activation.last_trained
             )
             tracking = {
+                "id": activation.id,
+                "user_id": activation.user_id,
                 "muscle_name": activation.muscle_name,
                 "total_volume": activation.total_volume,
                 "exercise_count": activation.exercise_count,
                 "last_trained": activation.last_trained,
-                "status": status
+                "weekly_volume": activation.weekly_volume or 0.0,
+                "monthly_volume": activation.monthly_volume or 0.0,
+                "coverage_rating": "Optimal" if activation.exercise_count >= 2 else "Needs Work",
+                "recovery_status": 1.0,  # Default to fully recovered
+                "status": status,
+                "week_start": week_start
             }
             tracking_data.append(tracking)
         
@@ -276,8 +300,7 @@ class WorkoutStorageService:
         else:  # monthly
             cutoff_date = datetime.utcnow() - timedelta(days=30)
         
-        # Debug: Print cutoff date
-        print(f"Getting volume data since {cutoff_date}")
+        logger.debug(f"Getting volume data since {cutoff_date}")
         
         try:
             # First check if we have any workout sessions
@@ -291,55 +314,45 @@ class WorkoutStorageService:
                 sessions = sessions.filter(WorkoutSession.user_id == user_id)
             
             sessions = sessions.all()
-            print(f"Found {len(sessions)} completed workout sessions")
+            logger.info(f"Found {len(sessions)} completed workout sessions")
             
             if not sessions:
-                print("No workout sessions found in the timeframe")
+                logger.info("No workout sessions found in the timeframe")
                 return []
             
             # Get all exercises for these sessions
             session_ids = [s.id for s in sessions]
-            exercises = (
-                self.db.query(Exercise)
-                .filter(Exercise.session_id.in_(session_ids))
-                .all()
-            )
-            print(f"Found {len(exercises)} exercises")
+            logger.info(f"Found {len(session_ids)} exercises")
             
-            if not exercises:
-                print("No exercises found in the sessions")
-                return []
-            
-            # Get muscle activations for these exercises
-            exercise_ids = [e.id for e in exercises]
+            # Query muscle activations with volume data
             volume_data = (
                 self.db.query(
                     MuscleActivation.muscle_name,
-                    func.sum(MuscleActivation.estimated_volume).label("total_volume"),
-                    func.avg(MuscleActivation.activation_percentage).label("avg_activation_percentage"),
-                    func.avg(MuscleActivation.volume_multiplier).label("avg_volume_multiplier"),
-                    cast(WorkoutSession.start_time, Date).label("date")
+                    func.sum(Exercise.total_volume * MuscleActivation.estimated_volume).label("total_volume"),
+                    func.count(MuscleActivation.id).label("exercise_count"),
+                    WorkoutSession.start_time.label("date"),
+                    func.date_trunc('week', WorkoutSession.start_time).label("week_start")
                 )
                 .select_from(MuscleActivation)
                 .join(Exercise, MuscleActivation.exercise_id == Exercise.id)
                 .join(WorkoutSession, Exercise.session_id == WorkoutSession.id)
-                .filter(Exercise.id.in_(exercise_ids))
+                .filter(WorkoutSession.id.in_(session_ids))
                 .group_by(
                     MuscleActivation.muscle_name,
-                    cast(WorkoutSession.start_time, Date)
+                    WorkoutSession.start_time,
+                    func.date_trunc('week', WorkoutSession.start_time)
                 )
+                .order_by(WorkoutSession.start_time.desc())
                 .all()
             )
-            
-            print(f"Found volume data for {len(volume_data)} muscle-date combinations")
             
             return [
                 {
                     "muscle_name": data.muscle_name,
-                    "total_volume": float(data.total_volume),  # Convert Decimal to float
-                    "avg_activation_percentage": float(data.avg_activation_percentage),
-                    "avg_volume_multiplier": float(data.avg_volume_multiplier),
-                    "date": data.date
+                    "total_volume": float(data.total_volume) if data.total_volume else 0.0,
+                    "exercise_count": data.exercise_count,
+                    "date": data.date,
+                    "week_start": data.week_start
                 }
                 for data in volume_data
             ]
@@ -347,7 +360,7 @@ class WorkoutStorageService:
         except Exception as e:
             logger.error(f"Error getting volume data: {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
-            return []
+            raise
 
     def _calculate_muscle_status(self, volume: float, count: int, last_trained: datetime) -> str:
         """Calculate the training status of a muscle based on volume and frequency"""
