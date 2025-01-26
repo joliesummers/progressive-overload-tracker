@@ -17,6 +17,7 @@ from ..services.bedrock_agent_service import BedrockAgentService
 from ..services.workout_storage_service import WorkoutStorageService
 import logging
 import json
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -56,10 +57,13 @@ async def get_muscle_tracking(
 ):
     """Get tracking data for all muscles worked in the past month"""
     try:
+        logger.info(f"Getting muscle tracking data for user {user_id}")
         tracking_data = storage_service.get_muscle_tracking(user_id=user_id)
+        logger.info(f"Found {len(tracking_data)} muscle tracking entries")
         return tracking_data
     except Exception as e:
         logger.error(f"Error getting muscle tracking data: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/muscle-volume", response_model=List[MuscleVolumeResponse])
@@ -70,10 +74,13 @@ async def get_muscle_volume(
 ):
     """Get volume data for all muscles worked in the specified timeframe"""
     try:
+        logger.info(f"Getting muscle volume data for user {user_id} with timeframe {timeframe}")
         volume_data = storage_service.get_muscle_volume_data(timeframe, user_id=user_id)
+        logger.info(f"Found {len(volume_data)} volume data entries")
         return volume_data
     except Exception as e:
         logger.error(f"Error getting muscle volume data: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/volume-progression", response_model=VolumeProgressionResponse)
@@ -84,7 +91,9 @@ async def get_volume_progression(
 ):
     """Get progression data for muscle volume over time"""
     try:
+        logger.info(f"Getting volume progression data for user {user_id} with timeframe {timeframe}")
         volume_data = storage_service.get_muscle_volume_data(timeframe, user_id=user_id)
+        logger.info(f"Found {len(volume_data)} volume data entries")
         
         # Process the data for visualization
         progression_data = {}
@@ -96,9 +105,11 @@ async def get_volume_progression(
                 "volume": entry.total_volume
             })
         
+        logger.info(f"Processed data for {len(progression_data)} muscles")
         return progression_data
     except Exception as e:
         logger.error(f"Error getting volume progression data: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/test/minimal")

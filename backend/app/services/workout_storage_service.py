@@ -6,9 +6,13 @@ from ..models.exercise import (
     WorkoutSession, 
     Exercise, 
     MuscleActivation,
-    MuscleActivationLevel,
-    exercise_muscle_association
+    MuscleActivationLevel
 )
+import traceback
+import logging
+import json
+
+logger = logging.getLogger(__name__)
 
 class WorkoutStorageService:
     """Service for storing workout data in the database"""
@@ -17,87 +21,138 @@ class WorkoutStorageService:
         self.db = db
 
     def create_workout_session(self, user_id: int) -> WorkoutSession:
-        """Create a new workout session for a user"""
-        session = WorkoutSession(
-            user_id=user_id,
-            start_time=datetime.utcnow()
-        )
-        self.db.add(session)
-        self.db.commit()
-        self.db.refresh(session)
-        return session
+        """Create a new workout session"""
+        try:
+            session = WorkoutSession(
+                user_id=user_id,
+                start_time=datetime.now(),
+                total_volume=0
+            )
+            self.db.add(session)
+            self.db.commit()
+            self.db.refresh(session)
+            return session
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error creating workout session: {str(e)}")
+            raise
+
+    def get_workout_session(self, session_id: int) -> Optional[WorkoutSession]:
+        """Get a workout session by ID"""
+        try:
+            return self.db.query(WorkoutSession).filter(WorkoutSession.id == session_id).first()
+        except Exception as e:
+            logger.error(f"Error getting workout session: {str(e)}")
+            return None
+
+    def get_session_exercises(self, session_id: int) -> List[Exercise]:
+        """Get all exercises for a workout session"""
+        try:
+            exercises = self.db.query(Exercise).filter(Exercise.session_id == session_id).all()
+            # Load relationships
+            for exercise in exercises:
+                _ = exercise.muscle_activations
+            return exercises
+        except Exception as e:
+            logger.error(f"Error getting session exercises: {str(e)}")
+            return []
 
     def end_workout_session(self, session_id: int) -> WorkoutSession:
         """End a workout session and calculate total volume"""
-        session = self.db.query(WorkoutSession).filter(WorkoutSession.id == session_id).first()
-        if not session:
-            raise ValueError(f"No workout session found with id {session_id}")
-        
-        # Calculate total volume for the session
-        total_volume = (
-            self.db.query(func.sum(MuscleActivation.estimated_volume))
-            .join(exercise_muscle_association, MuscleActivation.id == exercise_muscle_association.c.muscle_id)
-            .join(Exercise, exercise_muscle_association.c.exercise_id == Exercise.id)
-            .filter(Exercise.session_id == session_id)
-            .scalar() or 0.0
-        )
-        
-        session.end_time = datetime.utcnow()
-        session.total_volume = total_volume
-        self.db.commit()
-        self.db.refresh(session)
-        return session
-
-    def store_exercise_data(self, session_id: int, exercise_name: str, muscle_data: Dict[str, Any]) -> Exercise:
-        """Store exercise and muscle activation data from the Bedrock agent response"""
         try:
-            # Extract exercise data
-            exercise_data = muscle_data.get("exercise", {})
-            sets_data = exercise_data.get("sets", {})
-            metadata = exercise_data.get("metadata", {})
+            session = self.get_workout_session(session_id)
+            if not session:
+                raise ValueError("Session not found")
+                
+            # Get all exercises and calculate total volume
+            exercises = self.get_session_exercises(session_id)
+            total_volume = sum(ex.total_volume or 0 for ex in exercises)
             
-            print(f"Creating exercise record for session {session_id}")
-            print(f"Exercise data: {exercise_data}")
-            
-            # Create exercise record
-            exercise = self.create_exercise(
-                session_id=session_id,
-                name=exercise_name,
-                movement_pattern=exercise_data.get("movement_pattern"),
-                sets=sets_data.get("count", 0),
-                reps=sets_data.get("reps", 0),
-                weight=sets_data.get("weight", 0.0),
-                total_volume=exercise_data.get("total_volume", 0.0),
-                notes=exercise_data.get("notes"),
-                equipment=metadata.get("equipment"),
-                difficulty=metadata.get("difficulty"),
-                estimated_duration=metadata.get("estimated_duration"),
-                rest_period=metadata.get("rest_period"),
-                rpe=sets_data.get("rpe"),
-                tempo=sets_data.get("tempo")
-            )
-            
-            print(f"Created exercise with ID: {exercise.id}")
-            
-            # Store muscle activations
-            print(f"Processing {len(muscle_data.get('muscle_activations', []))} muscle activations")
-            for activation in muscle_data.get("muscle_activations", []):
-                print(f"Creating activation for {activation.get('muscle_name')} at {activation.get('activation_level')}")
-                self.create_muscle_activation(
-                    exercise_id=exercise.id,
-                    muscle_name=activation.get("muscle_name"),
-                    activation_level=activation.get("activation_level", "SECONDARY"),
-                    estimated_volume=activation.get("estimated_volume", 0.0)
-                )
+            # Update session
+            session.end_time = datetime.utcnow()
+            session.total_volume = total_volume
             
             self.db.commit()
-            print("Successfully stored all exercise data and muscle activations")
+            self.db.refresh(session)
+            return session
+            
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error ending workout session: {str(e)}")
+            raise
+
+    async def store_exercise_data(
+        self,
+        session_id: int,
+        name: str,
+        movement_pattern: Optional[str] = None,
+        notes: Optional[str] = None,
+        num_sets: Optional[int] = None,
+        reps: Optional[List[int]] = None,
+        weight: Optional[List[float]] = None,
+        rpe: Optional[float] = None,
+        tempo: Optional[str] = None,
+        total_volume: Optional[float] = None,
+        equipment: Optional[str] = None,
+        difficulty: Optional[str] = None,
+        estimated_duration: Optional[int] = None,
+        rest_period: Optional[int] = None,
+        muscle_activations: Optional[List[Dict[str, Any]]] = None
+    ) -> Exercise:
+        """Store exercise data with proper array handling"""
+        try:
+            # Create exercise record
+            exercise = Exercise(
+                session_id=session_id,
+                name=name,
+                movement_pattern=movement_pattern,
+                notes=notes,
+                num_sets=num_sets,
+                reps=json.dumps(reps) if reps else None,  # Convert to JSON string
+                weight=json.dumps(weight) if weight else None,  # Convert to JSON string
+                rpe=rpe,
+                tempo=tempo,
+                total_volume=total_volume,
+                equipment=equipment,
+                difficulty=difficulty,
+                estimated_duration=estimated_duration,
+                rest_period=rest_period
+            )
+            
+            self.db.add(exercise)
+            self.db.flush()  # Get the exercise ID
+            
+            # Add muscle activations if provided
+            if muscle_activations:
+                for activation in muscle_activations:
+                    muscle_activation = MuscleActivation(
+                        exercise_id=exercise.id,
+                        muscle_name=activation.get("muscle_name"),
+                        activation_level=MuscleActivationLevel[activation.get("activation_level", "PRIMARY")],
+                        estimated_volume=activation.get("estimated_volume")
+                    )
+                    self.db.add(muscle_activation)
+            
+            self.db.commit()
+            self.db.refresh(exercise)
             return exercise
             
         except Exception as e:
             self.db.rollback()
-            print(f"Error storing exercise data: {str(e)}")
-            raise ValueError(f"Failed to store exercise data: {str(e)}")
+            logger.error(f"Error storing exercise data: {str(e)}")
+            raise
+
+    def get_exercise(self, exercise_id: int) -> Optional[Exercise]:
+        """Get exercise by ID with proper array handling"""
+        try:
+            exercise = self.db.query(Exercise).filter(Exercise.id == exercise_id).first()
+            if exercise:
+                # Load relationships
+                _ = exercise.muscle_activations
+            return exercise
+        except Exception as e:
+            logger.error(f"Error getting exercise: {str(e)}")
+            return None
 
     def create_exercise(self, session_id: int, name: str, movement_pattern: str, 
                        sets: int, reps: int, weight: float, total_volume: float,
@@ -127,31 +182,32 @@ class WorkoutStorageService:
         self.db.refresh(exercise)
         return exercise
 
-    def create_muscle_activation(self, exercise_id: int, muscle_name: str,
-                               activation_level: str, estimated_volume: float) -> MuscleActivation:
-        """Create a new muscle activation record and associate it with an exercise"""
+    def create_muscle_activation(self, exercise_id: int, muscle_name: str, activation_level: str, estimated_volume: float) -> MuscleActivation:
+        """Create a muscle activation record and associate it with an exercise"""
         try:
-            # Create and persist the muscle activation
+            # Normalize the activation level
+            level = activation_level.lower()
+            if level not in [e.value for e in MuscleActivationLevel]:
+                level = "secondary"  # Default to secondary if invalid
+                
+            # Find the enum member with this value
+            enum_member = next(e for e in MuscleActivationLevel if e.value == level)
+            
             muscle_activation = MuscleActivation(
-                muscle_name=muscle_name,
-                activation_level=MuscleActivationLevel[activation_level],
+                exercise_id=exercise_id,
+                muscle_name=muscle_name.lower(),
+                activation_level=enum_member,
                 estimated_volume=estimated_volume
             )
             self.db.add(muscle_activation)
-            self.db.flush()  # Get the muscle activation ID
-
-            # Create and persist the association
-            stmt = exercise_muscle_association.insert().values(
-                exercise_id=exercise_id,
-                muscle_id=muscle_activation.id
-            )
-            self.db.execute(stmt)
-            self.db.commit()  # Commit both the activation and association
-            
+            self.db.commit()
+            self.db.refresh(muscle_activation)
             return muscle_activation
+            
         except Exception as e:
             self.db.rollback()
-            raise ValueError(f"Failed to create muscle activation: {str(e)}")
+            logger.error(f"Error creating muscle activation: {str(e)}")
+            raise
 
     def get_muscle_tracking(self, days: int = 30, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get tracking data for all muscles worked in the past N days"""
@@ -166,9 +222,8 @@ class WorkoutStorageService:
                 func.max(WorkoutSession.start_time).label("last_trained")
             )
             .select_from(MuscleActivation)
-            .join(exercise_muscle_association, MuscleActivation.id == exercise_muscle_association.c.muscle_id)
-            .join(Exercise, exercise_muscle_association.c.exercise_id == Exercise.id)
-            .join(WorkoutSession, Exercise.session_id == WorkoutSession.id)
+            .join(Exercise)
+            .join(WorkoutSession)
             .filter(WorkoutSession.start_time >= cutoff_date)
             .filter(WorkoutSession.end_time.isnot(None))  # Only include completed sessions
         )
@@ -220,54 +275,78 @@ class WorkoutStorageService:
         else:  # monthly
             cutoff_date = datetime.utcnow() - timedelta(days=30)
         
-        # Base query
-        query = (
-            self.db.query(
-                MuscleActivation.muscle_name,
-                func.sum(MuscleActivation.estimated_volume).label("total_volume"),
-                cast(WorkoutSession.start_time, Date).label("date")
-            )
-            .select_from(MuscleActivation)
-            .join(exercise_muscle_association, MuscleActivation.id == exercise_muscle_association.c.muscle_id)
-            .join(Exercise, exercise_muscle_association.c.exercise_id == Exercise.id)
-            .join(WorkoutSession, Exercise.session_id == WorkoutSession.id)
-            .filter(WorkoutSession.start_time >= cutoff_date)
-            .filter(WorkoutSession.end_time.isnot(None))  # Only include completed sessions
-        )
+        # Debug: Print cutoff date
+        print(f"Getting volume data since {cutoff_date}")
         
-        # Add user filter if specified
-        if user_id is not None:
-            query = query.filter(WorkoutSession.user_id == user_id)
-        
-        # Execute query with grouping
-        volume_data = (
-            query.group_by(
-                MuscleActivation.muscle_name,
-                cast(WorkoutSession.start_time, Date)
-            )
-            .all()
-        )
-        
-        # Debug logging
-        if not volume_data:
-            print("No volume data found")
-            # Check if there are any workout sessions
+        try:
+            # First check if we have any workout sessions
             sessions = (
                 self.db.query(WorkoutSession)
                 .filter(WorkoutSession.start_time >= cutoff_date)
                 .filter(WorkoutSession.end_time.isnot(None))
+            )
+            
+            if user_id is not None:
+                sessions = sessions.filter(WorkoutSession.user_id == user_id)
+            
+            sessions = sessions.all()
+            print(f"Found {len(sessions)} completed workout sessions")
+            
+            if not sessions:
+                print("No workout sessions found in the timeframe")
+                return []
+            
+            # Get all exercises for these sessions
+            session_ids = [s.id for s in sessions]
+            exercises = (
+                self.db.query(Exercise)
+                .filter(Exercise.session_id.in_(session_ids))
                 .all()
             )
-            print(f"Found {len(sessions)} completed workout sessions")
-        
-        return [
-            {
-                "muscle_name": data.muscle_name,
-                "total_volume": data.total_volume,
-                "date": data.date
-            }
-            for data in volume_data
-        ]
+            print(f"Found {len(exercises)} exercises")
+            
+            if not exercises:
+                print("No exercises found in the sessions")
+                return []
+            
+            # Get muscle activations for these exercises
+            exercise_ids = [e.id for e in exercises]
+            volume_data = (
+                self.db.query(
+                    MuscleActivation.muscle_name,
+                    func.sum(MuscleActivation.estimated_volume).label("total_volume"),
+                    func.avg(MuscleActivation.activation_percentage).label("avg_activation_percentage"),
+                    func.avg(MuscleActivation.volume_multiplier).label("avg_volume_multiplier"),
+                    cast(WorkoutSession.start_time, Date).label("date")
+                )
+                .select_from(MuscleActivation)
+                .join(Exercise, MuscleActivation.exercise_id == Exercise.id)
+                .join(WorkoutSession, Exercise.session_id == WorkoutSession.id)
+                .filter(Exercise.id.in_(exercise_ids))
+                .group_by(
+                    MuscleActivation.muscle_name,
+                    cast(WorkoutSession.start_time, Date)
+                )
+                .all()
+            )
+            
+            print(f"Found volume data for {len(volume_data)} muscle-date combinations")
+            
+            return [
+                {
+                    "muscle_name": data.muscle_name,
+                    "total_volume": float(data.total_volume),  # Convert Decimal to float
+                    "avg_activation_percentage": float(data.avg_activation_percentage),
+                    "avg_volume_multiplier": float(data.avg_volume_multiplier),
+                    "date": data.date
+                }
+                for data in volume_data
+            ]
+            
+        except Exception as e:
+            logger.error(f"Error getting volume data: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return []
 
     def _calculate_muscle_status(self, volume: float, count: int, last_trained: datetime) -> str:
         """Calculate the training status of a muscle based on volume and frequency"""

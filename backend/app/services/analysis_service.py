@@ -98,46 +98,72 @@ class AnalysisService:
                 
         return results
     
-    def calculate_rest_periods(self, user_id: int, 
-                             exercise_name: str = None) -> Dict[str, timedelta]:
-        """Calculate optimal rest periods based on exercise intensity and frequency"""
-        now = datetime.utcnow()
-        last_month = now - timedelta(days=30)
+    def calculate_rest_periods(self, user_id: int, days: int = 30) -> Dict[str, timedelta]:
+        """Calculate average rest periods between exercises"""
+        period_start = datetime.utcnow() - timedelta(days=days)
         
-        query = (
-            self.db.query(
-                Exercise.name,
-                func.max(Exercise.start_time).label("last_performed"),
-                func.avg(Exercise.total_volume).label("avg_volume")
-            )
-            .join(WorkoutSession)
+        # Get all workouts ordered by time
+        workouts = (
+            self.db.query(WorkoutSession)
             .filter(
                 WorkoutSession.user_id == user_id,
-                Exercise.start_time >= last_month
+                WorkoutSession.start_time >= period_start
             )
-        )
-        
-        if exercise_name:
-            query = query.filter(Exercise.name == exercise_name)
-            
-        results = (
-            query.group_by(Exercise.name)
+            .order_by(WorkoutSession.start_time.asc())
             .all()
         )
         
+        if len(workouts) < 2:
+            return {}
+            
         rest_periods = {}
-        for name, last_performed, avg_volume in results:
-            # Base rest period on volume intensity
-            if avg_volume > 1000:  # High volume
-                recommended_rest = timedelta(days=3)
-            elif avg_volume > 500:  # Medium volume
-                recommended_rest = timedelta(days=2)
-            else:  # Low volume
-                recommended_rest = timedelta(days=1)
-                
-            rest_periods[name] = recommended_rest
+        for i in range(1, len(workouts)):
+            rest_time = workouts[i].start_time - workouts[i-1].end_time
+            rest_periods[workouts[i].id] = rest_time
             
         return rest_periods
+
+    def generate_performance_insights(self, user_id: int) -> List[Dict[str, Any]]:
+        """Generate insights based on user's workout data"""
+        insights = []
+        
+        # Volume progression insight
+        volume_metrics = (
+            self.db.query(ProgressMetric)
+            .filter(
+                ProgressMetric.user_id == user_id,
+                ProgressMetric.metric_type == MetricType.VOLUME
+            )
+            .order_by(ProgressMetric.timestamp.desc())
+            .limit(10)
+            .all()
+        )
+        
+        if volume_metrics:
+            recent_volume = volume_metrics[0].value
+            avg_volume = sum(m.value for m in volume_metrics) / len(volume_metrics)
+            
+            if recent_volume > avg_volume * 1.1:  # 10% above average
+                insights.append({
+                    "category": "progress",
+                    "message": "Your recent workout volume is 10% above your average - great progress!",
+                    "relevance_score": 0.8
+                })
+        
+        # Add muscle balance insights
+        muscle_balance = self.analyze_muscle_balance(user_id)
+        if muscle_balance:
+            # Find undertrained muscles
+            total_volume = sum(m.total_volume for m in muscle_balance)
+            for muscle, data in muscle_balance:
+                if data.relative_emphasis < 0.1 and total_volume > 0:  # Less than 10% of total volume
+                    insights.append({
+                        "category": "balance",
+                        "message": f"Consider increasing training volume for {muscle} - currently undertrained",
+                        "relevance_score": 0.7
+                    })
+        
+        return insights
     
     def analyze_muscle_balance(self, user_id: int, days: int = 30) -> List[MuscleBalance]:
         """Analyze muscle group balance and training frequency"""
@@ -149,13 +175,13 @@ class AnalysisService:
                 MuscleActivation.muscle_name,
                 func.sum(MuscleActivation.estimated_volume).label("total_volume"),
                 func.count(MuscleActivation.id).label("frequency"),
-                func.max(Exercise.start_time).label("last_trained")
+                func.max(WorkoutSession.end_time).label("last_trained")
             )
-            .join(Exercise)
-            .join(WorkoutSession)
+            .join(Exercise, MuscleActivation.exercise_id == Exercise.id)
+            .join(WorkoutSession, Exercise.session_id == WorkoutSession.id)
             .filter(
                 WorkoutSession.user_id == user_id,
-                Exercise.start_time >= period_start
+                WorkoutSession.start_time >= period_start
             )
             .group_by(MuscleActivation.muscle_name)
             .all()

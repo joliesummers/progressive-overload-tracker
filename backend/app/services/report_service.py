@@ -3,7 +3,6 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from ..services.analysis_service import AnalysisService
-from ..services.output_processing_service import OutputProcessingService
 import json
 import csv
 from io import StringIO
@@ -36,7 +35,6 @@ class ReportService:
     def __init__(self, db: Session):
         self.db = db
         self.analysis_service = AnalysisService(db)
-        self.output_service = OutputProcessingService(db)
         
     def generate_progress_report(self, user_id: int, days: int = 30) -> ProgressReport:
         """Generate a comprehensive progress report"""

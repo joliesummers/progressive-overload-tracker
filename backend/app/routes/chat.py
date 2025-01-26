@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List, AsyncGenerator
 from ..services.integration_service import IntegrationService
@@ -11,6 +10,7 @@ from datetime import datetime
 from ..models.user import User
 import logging
 import json
+import traceback
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -32,11 +32,14 @@ class MuscleData(BaseModel):
 
 class ChatResponse(BaseModel):
     message: str
-    muscle_data: Optional[MuscleData] = None
+    display_message: Optional[str] = None
+    structured_data: Optional[Dict[str, Any]] = None
+    muscle_data: Optional[Dict[str, Any]] = None
     exercise_id: Optional[int] = None
     workout_data: Optional[Dict[str, Any]] = None
-    recommendations: Optional[List[Dict[str, Any]]] = None
+    recommendations: Optional[List[str]] = None
     next_steps: Optional[List[str]] = None
+    session_id: Optional[int] = None
 
 async def get_current_user(db: Session = Depends(get_db)) -> User:
     """Get or create a default user for testing"""
@@ -51,56 +54,77 @@ async def get_current_user(db: Session = Depends(get_db)) -> User:
         db.refresh(user)
     return user
 
-async def stream_response(response_stream: AsyncGenerator) -> AsyncGenerator[bytes, None]:
-    """Stream the response chunks"""
-    try:
-        async for chunk in response_stream:
-            if chunk:
-                # Log the chunk for debugging
-                logger.debug(f"Processing chunk: {chunk}")
-                
-                # Ensure chunk has the correct structure
-                if isinstance(chunk, dict):
-                    # Already formatted chunks from Messages API
-                    if "type" in chunk and chunk["type"] in ["message", "muscle_data", "error"]:
-                        # Don't double-encode error messages
-                        if chunk["type"] == "error":
-                            yield json.dumps({"type": "error", "error": chunk["error"]}).encode() + b"\n"
-                        else:
-                            yield json.dumps(chunk).encode() + b"\n"
-                    # Legacy format conversion
-                    elif "completion" in chunk:
-                        yield json.dumps({"type": "message", "message": chunk["completion"]}).encode() + b"\n"
-                    elif "muscle_data" in chunk:
-                        yield json.dumps({"type": "muscle_data", "muscle_data": chunk["muscle_data"]}).encode() + b"\n"
-                    elif "error" in chunk:
-                        yield json.dumps({"type": "error", "error": chunk["error"]}).encode() + b"\n"
-                # String chunks (convert to message type)
-                elif isinstance(chunk, str):
-                    yield json.dumps({"type": "message", "message": chunk}).encode() + b"\n"
-                
-    except Exception as e:
-        logger.error(f"Error streaming response: {str(e)}")
-        error_chunk = {"type": "error", "error": str(e)}
-        yield json.dumps(error_chunk).encode() + b"\n"
-
-@router.post("")
+@router.post("/")
 async def chat(
     request: ChatRequest,
     db: Session = Depends(get_db)
-) -> StreamingResponse:
-    """Chat endpoint that processes messages and returns streaming responses"""
+) -> ChatResponse:
+    """Chat endpoint that processes messages and returns responses"""
     try:
         # TODO: Get actual user ID from auth. Using 1 for now.
         user_id = 1
-        integration_service = IntegrationService(db)
-        response_stream = integration_service.process_workout_stream(user_id, request.message)
-        return StreamingResponse(
-            stream_response(response_stream),
-            media_type='text/event-stream'
+        
+        # Get workout data from Bedrock
+        bedrock_service = BedrockAgentService()
+        response = await bedrock_service.invoke_agent(request.message)
+        
+        if not response:
+            raise ValueError("No response received from Bedrock agent")
+        
+        logger.debug(f"Raw response from Claude: {response}")
+        
+        # Parse the response
+        structured_data = response.get("structured_data")
+        display_message = response.get("display_message")
+        
+        if not structured_data:
+            raise ValueError("No structured data found in response")
+            
+        logger.debug(f"Structured data: {structured_data}")
+        logger.debug(f"Exercise data: {structured_data.get('exercise', {})}")
+        logger.debug(f"Sets data: {structured_data.get('exercise', {}).get('sets', {})}")
+        
+        # Store workout data
+        workout_storage = WorkoutStorageService(db)
+        
+        # Create and store session
+        session = workout_storage.create_workout_session(user_id)
+        
+        # Store exercise data
+        exercise = workout_storage.store_exercise_data(
+            session_id=session.id,
+            exercise_name="",  # This will be taken from structured_data
+            muscle_data=structured_data
         )
+        
+        # End the session
+        session = workout_storage.end_workout_session(session.id)
+        
+        # Get muscle data
+        volume_data = workout_storage.get_muscle_volume_data(timeframe="weekly", user_id=user_id)
+        tracking_data = workout_storage.get_muscle_tracking(days=30, user_id=user_id)
+        activations = structured_data.get("muscle_activations", [])
+        
+        # Return response
+        return ChatResponse(
+            message=display_message or "Successfully processed your workout",
+            structured_data=structured_data,
+            muscle_data={
+                "activations": activations,
+                "volume_data": volume_data,
+                "tracking_data": tracking_data
+            },
+            exercise_id=exercise.id if exercise else None,
+            workout_data={
+                "session_id": session.id,
+                "display_message": display_message,
+                "exercise": structured_data.get("exercise", {})
+            }
+        )
+        
     except Exception as e:
         logger.error(f"Error in chat endpoint: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.options("")

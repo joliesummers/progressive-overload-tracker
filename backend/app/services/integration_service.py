@@ -3,7 +3,6 @@ from typing import Dict, List, Any, Optional, AsyncGenerator
 from datetime import datetime, timedelta
 from .cache_service import CacheService, cached
 from .bedrock_agent_service import BedrockAgentService
-from .output_processing_service import OutputProcessingService
 from .analysis_service import AnalysisService
 from .report_service import ReportService
 from .workout_storage_service import WorkoutStorageService
@@ -13,7 +12,6 @@ import logging
 from functools import wraps
 import traceback
 import inspect
-import re
 import json
 
 logger = logging.getLogger(__name__)
@@ -49,81 +47,62 @@ class IntegrationService:
         self.db = db
         self.cache_service = CacheService()
         self.bedrock_service = BedrockAgentService()
-        self.output_service = OutputProcessingService(db)
         self.analysis_service = AnalysisService(db)
         self.report_service = ReportService(db)
         
     @error_handler
     @cached("workout_analysis")
-    async def process_workout(self, user_id: int, workout_text: str) -> Dict[str, Any]:
+    async def process_workout(self, session_id: int, workout_text: str) -> Dict[str, Any]:
         """Process a workout through the entire pipeline"""
         try:
-            logger.info(f"Processing workout for user {user_id}")
+            logger.info(f"Processing workout for session {session_id}")
             logger.debug(f"Workout text: {workout_text}")
             
-            # 1. Parse workout with Bedrock
-            logger.debug("Invoking Bedrock agent")
-            agent_response = await self.bedrock_service.invoke_agent_with_retry(workout_text)
-            logger.debug(f"Got response from Bedrock: {agent_response}")
+            # Get response from Bedrock
+            response = await self.bedrock_service.invoke_agent(workout_text)
+            logger.debug(f"Bedrock response: {response}")
             
-            if not agent_response:
-                raise ValueError("No response received from Bedrock agent")
+            if not response or "structured_data" not in response:
+                raise ValueError("Invalid response from Bedrock")
+                
+            structured_data = response["structured_data"]
+            if "exercises" not in structured_data or not structured_data["exercises"]:
+                raise ValueError("No exercises found in response")
             
-            # 2. Extract completion text and parse JSON
-            completion_text = None
-            if isinstance(agent_response, dict) and "content" in agent_response:
-                for content in agent_response["content"]:
-                    if content["type"] == "text":
-                        completion_text = content["text"]
-                        break
-            
-            if not completion_text:
-                raise ValueError("No completion text found in agent response")
-            
-            # 3. Process the response to extract workout data
-            logger.debug("Processing agent output")
-            workout_data = await self.output_service.process_agent_output(completion_text)
-            logger.debug(f"Processed workout data: {workout_data}")
-            
-            if not workout_data:
-                raise ValueError("Failed to process workout data from agent response")
-            
-            # 4. Store the workout data
+            # Store the workout data
             logger.debug("Storing workout data")
             workout_storage = WorkoutStorageService(self.db)
-            session = workout_storage.create_workout_session(user_id)
             
-            # Get exercise data
-            exercise_data = workout_data["exercise"]
-            exercise = workout_storage.create_exercise(
-                session.id,
-                name=exercise_data["name"],
-                movement_pattern=exercise_data["movement_pattern"],
-                sets=exercise_data["sets"],
-                reps=exercise_data["reps"],
-                weight=exercise_data["weight"],
-                total_volume=exercise_data["total_volume"],
-                notes=exercise_data.get("notes", "")
-            )
-            
-            # Store muscle activations
-            for muscle in workout_data["muscle_activations"]:
-                workout_storage.create_muscle_activation(
-                    exercise.id,
-                    muscle["muscle_name"],
-                    muscle["activation_level"],
-                    muscle["estimated_volume"]
+            # Process each exercise
+            exercises = []
+            for exercise_data in structured_data["exercises"]:
+                logger.debug(f"Processing exercise: {exercise_data}")
+                
+                # Store exercise data
+                exercise = await workout_storage.store_exercise_data(
+                    session_id=session_id,
+                    name=exercise_data.get("name"),
+                    movement_pattern=exercise_data.get("movement_pattern"),
+                    num_sets=exercise_data.get("num_sets"),
+                    reps=exercise_data.get("reps", []),  # Already an array
+                    weight=exercise_data.get("weight", []),  # Already an array
+                    rpe=exercise_data.get("rpe"),
+                    tempo=exercise_data.get("tempo"),
+                    total_volume=exercise_data.get("total_volume"),
+                    notes=exercise_data.get("notes"),
+                    equipment=exercise_data.get("equipment"),
+                    difficulty=exercise_data.get("difficulty"),
+                    estimated_duration=exercise_data.get("estimated_duration"),
+                    rest_period=exercise_data.get("rest_period"),
+                    muscle_activations=exercise_data.get("muscle_activations", [])
                 )
+                exercises.append(exercise)
             
-            # Return processed data
-            return {
-                "completion": completion_text,
-                "workout_data": workout_data,
-                "session_id": session.id
-            }
+            # Return the first exercise for now (maintaining backward compatibility)
+            return exercises[0].to_dict() if exercises else None
             
         except Exception as e:
-            logger.error(f"Error extracting muscle data: {str(e)}")
+            logger.error(f"Error processing workout: {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise
             
@@ -188,6 +167,145 @@ class IntegrationService:
             return ["Error generating recommendations"]
             
     @error_handler
+    async def process_workout_stream(self, user_id: int, workout_text: str) -> Dict[str, Any]:
+        """Process a workout through the entire pipeline"""
+        try:
+            logger.info(f"Processing workout for user {user_id}")
+            logger.debug(f"Workout text: {workout_text}")
+            
+            # Parse workout with Bedrock
+            logger.debug("Invoking Bedrock agent")
+            response = await self.bedrock_service.invoke_agent(workout_text)
+            logger.debug(f"Got response from Bedrock: {response}")
+            
+            if not response:
+                raise ValueError("No response received from Bedrock agent")
+            
+            # Parse the response to get structured data and display message
+            try:
+                # First try to get structured_data directly from response
+                if isinstance(response, dict):
+                    structured_data = response.get("structured_data")
+                    display_message = response.get("display_message", "")
+                    
+                # If not found, try to parse from message
+                if not structured_data and isinstance(response.get("message"), str):
+                    message = response["message"]
+                    # Find the last JSON object in the message
+                    json_start = message.rfind("{\n")
+                    json_end = message.rfind("\n}") + 2
+                    
+                    if json_start >= 0 and json_end > json_start:
+                        json_str = message[json_start:json_end]
+                        logger.debug(f"Extracted JSON string: {json_str}")
+                        parsed_data = json.loads(json_str)
+                        structured_data = parsed_data.get("structured_data")
+                        display_message = parsed_data.get("display_message", "")
+                
+                if not structured_data:
+                    raise ValueError("No structured data found in response")
+                    
+                logger.debug(f"Extracted structured data: {structured_data}")
+                logger.debug(f"Display message: {display_message}")
+                
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.error(f"Error parsing response: {str(e)}")
+                raise ValueError(f"Invalid response format from Bedrock agent: {str(e)}")
+            
+            # Store the workout data
+            try:
+                logger.debug("Creating workout session")
+                workout_storage = WorkoutStorageService(self.db)
+                session = workout_storage.create_workout_session(user_id)
+                logger.debug(f"Created workout session with ID: {session.id}")
+                
+                # Store exercise and muscle activation data
+                logger.debug("Storing exercise data with structured data")
+                exercises = []
+                for exercise_data in structured_data.get("exercises", []):
+                    exercise = workout_storage.store_exercise_data(
+                        session_id=session.id,
+                        name=exercise_data.get("name"),
+                        movement_pattern=exercise_data.get("movement_pattern"),
+                        num_sets=exercise_data.get("sets", {}).get("count"),
+                        reps=exercise_data.get("sets", {}).get("reps", []),  # Pass raw array
+                        weight=exercise_data.get("sets", {}).get("weight", []),  # Pass raw array
+                        rpe=exercise_data.get("sets", {}).get("rpe"),
+                        tempo=exercise_data.get("sets", {}).get("tempo"),
+                        total_volume=exercise_data.get("total_volume"),
+                        notes=exercise_data.get("notes"),
+                        equipment=exercise_data.get("metadata", {}).get("equipment"),
+                        difficulty=exercise_data.get("metadata", {}).get("difficulty"),
+                        estimated_duration=exercise_data.get("metadata", {}).get("estimated_duration"),
+                        rest_period=exercise_data.get("metadata", {}).get("rest_period"),
+                        muscle_activations=[
+                            {
+                                "muscle_name": m.get("muscle"),
+                                "activation_level": m.get("level"),
+                                "estimated_volume": m.get("volume")
+                            }
+                            for m in exercise_data.get("muscle_activations", [])
+                        ]
+                    )
+                    exercises.append(exercise)
+                
+                # End the workout session
+                logger.debug("Ending workout session")
+                session = workout_storage.end_workout_session(session.id)
+                logger.debug(f"Ended workout session: {session.id}")
+                
+                # Get muscle data
+                logger.debug("Getting muscle volume data")
+                volume_data = workout_storage.get_muscle_volume_data(timeframe="weekly", user_id=user_id)
+                logger.debug(f"Got volume data: {volume_data}")
+                
+                logger.debug("Getting muscle tracking data")
+                tracking_data = workout_storage.get_muscle_tracking(days=30, user_id=user_id)
+                logger.debug(f"Got tracking data: {tracking_data}")
+                
+                logger.debug("Getting muscle activations")
+                activations = []
+                for exercise in exercises:
+                    for muscle_activation in exercise.muscle_activations:
+                        activations.append({
+                            "muscle_name": muscle_activation.muscle_name,
+                            "activation_level": muscle_activation.activation_level,
+                            "estimated_volume": muscle_activation.estimated_volume
+                        })
+                logger.debug(f"Got activations: {activations}")
+                
+                # Return processed data
+                result = {
+                    "message": response["message"],  # Use the full message from Bedrock
+                    "structured_data": structured_data,  # Include the full structured data
+                    "muscle_data": {
+                        "activations": activations,
+                        "volume_data": volume_data,
+                        "tracking_data": tracking_data
+                    },
+                    "exercise_id": exercises[0].id if exercises else None,
+                    "workout_data": {
+                        "session_id": session.id,
+                        "display_message": display_message,
+                        "exercises": [{"id": exercise.id, "name": exercise.name} for exercise in exercises]
+                    },
+                    "recommendations": None,  # TODO: Add recommendations based on volume data
+                    "next_steps": None  # TODO: Add next steps based on tracking data
+                }
+                logger.debug(f"Final result: {result}")
+                return result
+                
+            except Exception as e:
+                logger.error(f"Error storing workout data: {str(e)}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
+            
+        except Exception as e:
+            logger.error(f"Error processing workout: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
+
+    @error_handler
     async def refresh_cache(self, user_id: int):
         """Refresh all cached data for a user"""
         await self.cache_service.clear_user_cache(user_id)
@@ -197,58 +315,3 @@ class IntegrationService:
     async def clear_user_cache(self, user_id: int):
         """Clear all cached data for a user"""
         await self.cache_service.clear_user_cache(user_id)
-        
-    @error_handler
-    async def process_workout_stream(self, user_id: int, workout_text: str) -> AsyncGenerator[Dict[str, Any], None]:
-        """Process a workout through the entire pipeline with streaming response"""
-        try:
-            logger.info(f"Processing workout stream for user {user_id}")
-            logger.debug(f"Workout text: {workout_text}")
-            
-            # Parse workout with Bedrock
-            logger.debug("Invoking Bedrock agent")
-            async for chunk in self.bedrock_service.stream_agent_response(workout_text):
-                logger.debug(f"Received chunk from Bedrock: {chunk}")
-                
-                # Handle errors
-                if isinstance(chunk, dict):
-                    if "error" in chunk:
-                        logger.error(f"Error from Bedrock: {chunk['error']}")
-                        yield chunk
-                        continue
-                        
-                    if "type" in chunk:
-                        if chunk["type"] == "message" and chunk.get("message"):
-                            yield chunk
-                            
-                            # Try to extract muscle data from message
-                            try:
-                                muscle_data = await self.output_service.extract_muscle_data(chunk["message"])
-                                if muscle_data:
-                                    # Convert tuples to lists for JSON serialization
-                                    formatted_data = {
-                                        "primary_muscles": [{"muscle": m, "activation": a} for m, a in muscle_data["primary_muscles"]],
-                                        "secondary_muscles": [{"muscle": m, "activation": a} for m, a in muscle_data["secondary_muscles"]],
-                                        "total_volume": muscle_data["total_volume"],
-                                        "sets": muscle_data["sets"],
-                                        "reps": muscle_data["reps"],
-                                        "weight": muscle_data["weight"]
-                                    }
-                                    yield {"type": "muscle_data", "muscle_data": formatted_data}
-                            except Exception as e:
-                                logger.error(f"Error extracting muscle data: {str(e)}")
-                                
-                        elif chunk["type"] == "muscle_data" and chunk.get("muscle_data"):
-                            yield chunk
-                        else:
-                            logger.warning(f"Unknown chunk type: {chunk['type']}")
-                            
-                else:
-                    logger.warning(f"Unknown chunk format: {chunk}")
-                    yield {"type": "message", "message": str(chunk)}
-                    
-        except Exception as e:
-            logger.error(f"Error in workout stream: {str(e)}")
-            logger.error(f"Exception type: {type(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            yield {"type": "error", "error": str(e)}

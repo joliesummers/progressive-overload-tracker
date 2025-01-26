@@ -1,5 +1,5 @@
 // Use backend service name from docker-compose
-export const API_BASE_URL = process.env.NODE_ENV === 'development' ? 'http://backend:8000' : '';
+export const API_BASE_URL = process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : '';
 
 export const ENDPOINTS = {
   // Analytics endpoints
@@ -12,5 +12,5 @@ export const ENDPOINTS = {
   ANALYZE_SENTIMENT: '/api/exercise/analyze/sentiment',
   
   // Chat endpoints
-  CHAT: '/api/chat',
+  CHAT: '/api/chat/',  
 };

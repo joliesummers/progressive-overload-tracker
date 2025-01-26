@@ -4,8 +4,6 @@ from .exercise import (
     MuscleTracking,
     ExerciseTemplate,
     WorkoutSession,
-    ExerciseSet,
-    MuscleVolumeData,
     MuscleActivationLevel
 )
 from .user import User
@@ -17,8 +15,6 @@ __all__ = [
     'MuscleTracking',
     'ExerciseTemplate',
     'WorkoutSession',
-    'ExerciseSet',
-    'MuscleVolumeData',
     'MuscleActivationLevel',
     'User',
     'Base',

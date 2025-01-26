@@ -1,11 +1,16 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from app.models.database import Base
-from app.models.exercise import Exercise, MuscleActivation, MuscleTracking, ExerciseTemplate, WorkoutSession, ExerciseSet, MuscleVolumeData
-from app.core.settings import settings
+from app.core.settings import get_settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 def init_db():
-    engine = create_engine(settings.SQLALCHEMY_DATABASE_URL)
+    settings = get_settings()
+    logger.info("Initializing database...")
+    engine = create_engine(settings.database_url)
+    Base.metadata.drop_all(bind=engine)  # Drop all tables to ensure clean state
     Base.metadata.create_all(bind=engine)
     
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -13,41 +18,54 @@ def init_db():
     
     try:
         # Create a test user
-        db.execute("INSERT INTO users (id, email) VALUES (1, 'test@example.com') ON CONFLICT DO NOTHING")
+        logger.info("Creating test user...")
+        db.execute(
+            text("INSERT INTO users (id, username, email) VALUES (1, 'testuser', 'test@example.com') ON CONFLICT DO NOTHING")
+        )
         
-        # Create a test workout session
-        db.execute("""
-            INSERT INTO workout_sessions (
-                id, user_id, start_time, end_time, 
-                sentiment_score, sentiment_analysis, notes, total_volume
-            )
-            VALUES (
-                1, 1, NOW() - INTERVAL '7 days', 
-                NOW() - INTERVAL '7 days' + INTERVAL '1 hour',
-                NULL, NULL, NULL, NULL
-            )
-            ON CONFLICT DO NOTHING
-        """)
+        # Create a test workout session with auto-generated ID
+        logger.info("Creating test workout session...")
+        result = db.execute(
+            text("""
+                INSERT INTO workout_sessions (
+                    user_id, start_time, end_time, 
+                    total_volume
+                )
+                VALUES (
+                    1, NOW() - INTERVAL '7 days', 
+                    NOW() - INTERVAL '7 days' + INTERVAL '1 hour',
+                    0
+                )
+                RETURNING id
+            """)
+        )
+        session_id = result.scalar()
         
-        # Create a test exercise
-        db.execute("""
-            INSERT INTO exercises (
-                id, session_id, name, movement_pattern, 
-                equipment_needed, notes, num_sets, reps, 
-                weight, rpe, tempo
-            )
-            VALUES (
-                1, 1, 'Bench Press', 'Push',
-                '[]'::json, NULL, 3, 8,
-                135.0, NULL, NULL
-            )
-            ON CONFLICT DO NOTHING
-        """)
+        # Create a test exercise with auto-generated ID
+        logger.info("Creating test exercise...")
+        db.execute(
+            text("""
+                INSERT INTO exercises (
+                    session_id, name, movement_pattern, 
+                    notes, num_sets, reps, weight, rpe,
+                    tempo, total_volume, equipment, difficulty,
+                    estimated_duration, rest_period
+                )
+                VALUES (
+                    :session_id, 'Bench Press', 'Push',
+                    'Test exercise', 3, '[8,8,8]', '[135,145,155]', 8,
+                    '2-0-1', 3480, 'Barbell', 'Intermediate',
+                    15, 90
+                )
+            """), {'session_id': session_id})
         
         db.commit()
+        logger.info("Database initialization completed successfully")
+        
     except Exception as e:
-        print(f"Error initializing database: {e}")
+        logger.error(f"Error initializing database: {str(e)}")
         db.rollback()
+        raise
     finally:
         db.close()
 
