@@ -108,20 +108,6 @@ const AnalyticsDashboard: React.FC = () => {
             <MuscleStatusCard data={muscleData || []} />
           </Paper>
         </Grid>
-        <Grid item xs={12}>
-          <Paper
-            sx={{
-              p: 3,
-              bgcolor: '#1e1e1e',
-              '& .MuiTypography-root': { color: '#fff' }
-            }}
-          >
-            <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-              Muscle Recovery Status
-            </Typography>
-            <MuscleStatusCard data={muscleData || []} />
-          </Paper>
-        </Grid>
         <Grid item xs={12} md={6}>
           <Paper
             sx={{
